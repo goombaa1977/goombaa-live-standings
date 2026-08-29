@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Goombaa Control Center - Mobile</title>
+
+    <style>
+        :root {
+            --bg-color: #0b0e14;
+            --panel-bg: #161c28;
+            --input-bg: #0d1117;
+            --border-color: #232d42;
+            --text-main: #ffffff;
+            --text-muted: #8b949e;
+            --accent-green: #00e676;
+            --accent-orange: #ff9900;
+            --accent-red: #ff3333;
+            --accent-blue: #00b0ff;
+            --accent-purple: #ab47bc;
+        }
+
+        * { 
+            box-sizing: border-box; 
+            margin: 0; 
+            padding: 0; 
+            font-family: 'Segoe UI', Arial, sans-serif; 
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        body { 
+            background-color: var(--bg-color); 
+            color: var(--text-main); 
+            padding: 10px; 
+            touch-action: manipulation;
+        }
+
+        .card {
+            background: var(--panel-bg);
+            border: 1.5px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        h2 {
+            font-size: 12px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 4px;
+            color: var(--accent-blue);
+        }
+
+        .field-group { display: flex; flex-direction: column; gap: 4px; }
+        label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+
+        .input-btn-row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        input[type="text"] {
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 10px;
+            color: var(--text-main);
+            font-size: 14px;
+            font-weight: 600;
+            outline: none;
+            -webkit-user-select: text;
+            user-select: text;
+            transition: border-color 0.2s, background-color 0.2s;
+            flex: 1;
+        }
+
+        input[type="text"].drop-hover {
+            border-color: var(--accent-green) !important;
+            background-color: #1a2e22 !important;
+        }
+
+        .btn-group { display: flex; gap: 6px; }
+        button {
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            padding: 12px 6px;
+            font-weight: 800;
+            text-transform: uppercase;
+            font-size: 10px;
+            touch-action: manipulation;
+        }
+
+        .btn-green { background: var(--accent-green); color: #000; }
+        .btn-orange { background: var(--accent-orange); color: #000; }
+        .btn-red { background: var(--accent-red); color: #fff; }
+        .btn-blue { background: var(--accent-blue); color: #000; }
+
+        .top-button-group {
+            display: flex;
+            gap: 6px;
+        }
+
+        .btn-third {
+            flex: 1;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: 900;
+            padding: 10px 4px;
+            text-align: center;
+            letter-spacing: 0.3px;
+        }
+
+        .btn-reset-third {
+            background: var(--accent-red);
+            color: #ffffff;
+            box-shadow: 0 4px 10px rgba(255, 51, 51, 0.25);
+        }
+
+        .btn-edit-third {
+            background: var(--accent-orange);
+            color: #000;
+            box-shadow: 0 4px 10px rgba(255, 153, 0, 0.25);
+        }
+
+        .btn-delete-third {
+            background: linear-gradient(135deg, #8e2de2, #4a00e0);
+            color: #ffffff;
+            box-shadow: 0 4px 10px rgba(142, 45, 226, 0.25);
+        }
+
+        .big-win-btn {
+            padding: 10px 14px;
+            font-size: 14px;
+            font-weight: 900;
+            background: var(--accent-green);
+            color: #000;
+            border-radius: 5px;
+            white-space: nowrap;
+        }
+
+        .queue-display {
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            min-height: 90px;
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .queue-row {
+            display: flex;
+            flex-direction: column;
+            background: #161c28;
+            padding: 8px 10px;
+            border-radius: 5px;
+            border: 1px solid var(--border-color);
+            gap: 6px;
+            touch-action: none;
+        }
+
+        .queue-header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .player-tag-span { 
+            font-size: 14px;
+            font-weight: 800;
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            color: var(--text-main);
+        }
+
+        .action-btns { display: flex; gap: 4px; align-items: center; width: 100%; }
+        .small-btn { padding: 8px 6px; font-size: 10px; line-height: 1; flex: 1; text-align: center; }
+
+        /* Floating Drag Ghost for Touch */
+        .drag-ghost {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.85;
+            background: var(--accent-blue);
+            color: #000;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-weight: 800;
+            font-size: 14px;
+            box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
+            transform: translate(-50%, -50%);
+        }
+
+        /* Modal Popup Styles */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.75);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: var(--panel-bg);
+            border: 1.5px solid var(--border-color);
+            padding: 16px;
+            border-radius: 8px;
+            width: 85%;
+            max-width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .modal-title {
+            font-size: 12px;
+            font-weight: 900;
+            color: var(--accent-red);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- TOP CONTROL BUTTON GROUP (Reset, Edit, Delete) -->
+    <div class="card">
+        <div class="top-button-group">
+            <button class="btn-third btn-reset-third" onclick="openResetModal()">⚠️ RESET</button>
+            <button class="btn-third btn-edit-third" onclick="openEditModal()">✏️ EDIT</button>
+            <button class="btn-third btn-delete-third" onclick="openDeleteModal()">🗑️ DELETE</button>
+        </div>
+    </div>
+
+    <!-- ACTIVE MATCH CARD -->
+    <div class="card">
+        <h2>Active Match (KotH)</h2>
+
+        <div class="field-group">
+            <label>Round Label</label>
+            <input type="text" id="roundLabel" value="FIGHTING NOW">
+        </div>
+
+        <div class="field-group">
+            <label>Player 1 Tag (Drop tag here)</label>
+            <div class="input-btn-row">
+                <input type="text" id="p1Input" value="Player 1">
+                <button class="big-win-btn" onclick="handleWinAndAdvance('p1')">+1 W</button>
+            </div>
+        </div>
+
+        <div class="field-group">
+            <label>Player 2 Tag (Drop tag here)</label>
+            <div class="input-btn-row">
+                <input type="text" id="p2Input" value="Player 2">
+                <button class="big-win-btn" onclick="handleWinAndAdvance('p2')">+1 W</button>
+            </div>
+        </div>
+
+        <div class="btn-group" style="margin-top: 4px;">
+            <button class="btn-green" style="flex:2" onclick="updateActiveMatch()">Update Match</button>
+            <button class="btn-orange" style="flex:1" onclick="undoActiveWin()">Undo</button>
+        </div>
+    </div>
+
+    <!-- QUEUE MANAGER CARD -->
+    <div class="card">
+        <h2>Queue Manager</h2>
+
+        <div class="field-group">
+            <div class="btn-group">
+                <input type="text" id="queueInput" placeholder="Add tag..." style="flex:1">
+                <button class="btn-blue" onclick="addPlayerToQueue()">Add</button>
+            </div>
+        </div>
+
+        <div class="queue-display" id="queueContainer"></div>
+        <button class="btn-red" style="margin-top: 4px;" onclick="clearQueue()">Clear Queue</button>
+    </div>
+
+    <!-- Reset Standings Modal Popup -->
+    <div id="resetModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-title">Reset Standings</div>
+            <div style="font-size: 11px; color: var(--text-muted);">Choose which leaderboard to reset:</div>
+            <div class="btn-group" style="flex-direction: column; gap: 6px;">
+                <button class="btn-orange" style="padding: 10px;" onclick="confirmReset('daily')">Reset Daily</button>
+                <button class="btn-orange" style="padding: 10px;" onclick="confirmReset('weekly')">Reset Weekly</button>
+                <button class="btn-orange" style="padding: 10px;" onclick="confirmReset('monthly')">Reset Monthly</button>
+                <button class="btn-red" style="padding: 10px;" onclick="confirmReset('all')">Reset All</button>
+            </div>
+            <button class="btn-blue" style="margin-top: 4px; padding: 10px;" onclick="closeResetModal()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Edit Player Modal Popup -->
+    <div id="editModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-title" style="color: var(--accent-orange);">Edit Player Tag</div>
+            <div class="field-group">
+                <label>Current Tag</label>
+                <input type="text" id="editOldTagInput" placeholder="Old gamertag...">
+            </div>
+            <div class="field-group">
+                <label>New Tag</label>
+                <input type="text" id="editNewTagInput" placeholder="New gamertag...">
+            </div>
+            <div class="btn-group" style="margin-top: 4px;">
+                <button class="btn-orange" style="flex:1" onclick="confirmEditPlayer()">Save</button>
+                <button class="btn-red" style="flex:1" onclick="closeEditModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Player Modal Popup -->
+    <div id="deleteModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-title" style="color: var(--accent-red);">Delete Player from Standings</div>
+            <div class="field-group">
+                <label>Exact Gamertag</label>
+                <input type="text" id="deleteTagInput" placeholder="Enter gamertag...">
+            </div>
+            <div class="btn-group" style="margin-top: 4px;">
+                <button class="btn-red" style="flex:1" onclick="confirmDeletePlayer()">Delete</button>
+                <button class="btn-orange" style="flex:1" onclick="closeDeleteModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin.includes("http") ? `${window.location.origin}/api` : "http://127.0.0.1:8000/api";
+        
+        let isEditingMatch = false;
+        let isEditingQueueItem = false;
+        let localQueue = [];
+
+        // Mobile Touch Dragging State Variables
+        let activeTouchIndex = null;
+        let touchGhost = null;
+
+        const p1Input = document.getElementById('p1Input');
+        const p2Input = document.getElementById('p2Input');
+        const queueInput = document.getElementById('queueInput');
+
+        p1Input.addEventListener('focus', () => isEditingMatch = true);
+        p1Input.addEventListener('blur', () => isEditingMatch = false);
+        p2Input.addEventListener('focus', () => isEditingMatch = true);
+        p2Input.addEventListener('blur', () => isEditingMatch = false);
+        document.getElementById('roundLabel').addEventListener('focus', () => isEditingMatch = true);
+        document.getElementById('roundLabel').addEventListener('blur', () => isEditingMatch = false);
+
+        queueInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addPlayerToQueue();
+            }
+        });
+
+        document.getElementById('deleteTagInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                confirmDeletePlayer();
+            }
+        });
+
+        document.getElementById('editNewTagInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                confirmEditPlayer();
+            }
+        });
+
+        async function syncState() {
+            if (activeTouchIndex !== null || isEditingQueueItem) return;
+
+            try {
+                const matchRes = await fetch(`${API_BASE}/match`);
+                const matchData = await matchRes.json();
+                if (!isEditingMatch && matchData) {
+                    document.getElementById('roundLabel').value = matchData.round || "FIGHTING NOW";
+                    p1Input.value = matchData.p1 || matchData.player1 || "Player 1";
+                    p2Input.value = matchData.p2 || matchData.player2 || "Player 2";
+                }
+
+                const queueRes = await fetch(`${API_BASE}/queue`);
+                const queueData = await queueRes.json();
+                if (Array.isArray(queueData)) {
+                    localQueue = queueData;
+                    renderQueueUI(localQueue);
+                }
+            } catch (e) {}
+        }
+
+        function renderQueueUI(queue) {
+            if (isEditingQueueItem || activeTouchIndex !== null) return;
+            const container = document.getElementById('queueContainer');
+            container.innerHTML = '';
+
+            if (!queue || queue.length === 0) {
+                container.innerHTML = `<div style="color: var(--text-muted); font-size: 11px; text-align: center; padding: 20px 0;">Queue Empty</div>`;
+                return;
+            }
+
+            queue.forEach((player, idx) => {
+                const row = document.createElement('div');
+                row.className = 'queue-row';
+                row.innerHTML = `
+                    <div class="queue-header-row">
+                        <span class="player-tag-span">☰ ${idx + 1}. ${player}</span>
+                    </div>
+                    <div class="action-btns">
+                        <button class="small-btn btn-green" onclick="addQueueWin(${idx})">+1 W</button>
+                        <button class="small-btn btn-orange" onclick="undoQueueWin(${idx})">UNDO</button>
+                        <button class="small-btn btn-blue" onclick="moveUp(${idx})">▲</button>
+                        <button class="small-btn btn-blue" onclick="moveDown(${idx})">▼</button>
+                        <button class="small-btn btn-orange" onclick="editItem(${idx})">EDIT</button>
+                        <button class="small-btn btn-red" style="flex:0.5;" onclick="removeQueueIndex(${idx})">X</button>
+                    </div>
+                `;
+
+                const header = row.querySelector('.queue-header-row');
+                header.addEventListener('touchstart', (e) => handleTouchStart(e, idx, player), { passive: false });
+                header.addEventListener('touchmove', handleTouchMove, { passive: false });
+                header.addEventListener('touchend', handleTouchEnd, { passive: false });
+
+                container.appendChild(row);
+            });
+        }
+
+        /* Pure Mobile Touch-Drag Engine */
+        function handleTouchStart(e, index, playerName) {
+            activeTouchIndex = index;
+            const touch = e.touches[0];
+
+            touchGhost = document.createElement('div');
+            touchGhost.className = 'drag-ghost';
+            touchGhost.innerText = playerName;
+            touchGhost.style.left = touch.clientX + 'px';
+            touchGhost.style.top = touch.clientY + 'px';
+            document.body.appendChild(touchGhost);
+        }
+
+        function handleTouchMove(e) {
+            if (activeTouchIndex === null || !touchGhost) return;
+            e.preventDefault();
+
+            const touch = e.touches[0];
+            touchGhost.style.left = touch.clientX + 'px';
+            touchGhost.style.top = touch.clientY + 'px';
+
+            const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+            p1Input.classList.remove('drop-hover');
+            p2Input.classList.remove('drop-hover');
+
+            if (targetEl === p1Input) p1Input.classList.add('drop-hover');
+            if (targetEl === p2Input) p2Input.classList.add('drop-hover');
+        }
+
+        async function handleTouchEnd(e) {
+            if (activeTouchIndex === null) return;
+            const touch = e.changedTouches[0];
+            const dropTarget = document.elementFromPoint(touch.clientX, touch.clientY);
+
+            p1Input.classList.remove('drop-hover');
+            p2Input.classList.remove('drop-hover');
+
+            if (touchGhost) {
+                touchGhost.remove();
+                touchGhost = null;
+            }
+
+            const dragIdx = activeTouchIndex;
+            activeTouchIndex = null;
+
+            if (dragIdx < 0 || dragIdx >= localQueue.length) return;
+
+            if (dropTarget === p1Input) {
+                await sendToMatch(dragIdx, 'p1');
+                return;
+            }
+
+            if (dropTarget === p2Input) {
+                await sendToMatch(dragIdx, 'p2');
+                return;
+            }
+
+            let targetRow = dropTarget ? dropTarget.closest('.queue-row') : null;
+            if (targetRow && targetRow.parentNode) {
+                const rows = Array.from(targetRow.parentNode.children);
+                const dropIdx = rows.indexOf(targetRow);
+
+                if (dropIdx !== -1 && dropIdx !== dragIdx) {
+                    const movedItem = localQueue.splice(dragIdx, 1)[0];
+                    localQueue.splice(dropIdx, 0, movedItem);
+                    renderQueueUI(localQueue);
+                    await syncQueue();
+                }
+            }
+        }
+
+        async function sendToMatch(index, slot) {
+            if (index < 0 || index >= localQueue.length) return;
+
+            const selectedPlayer = localQueue.splice(index, 1)[0];
+            const currentP1 = p1Input.value.trim();
+            const currentP2 = p2Input.value.trim();
+
+            if (slot === 'p1') {
+                if (currentP1 && currentP1 !== "Player 1") {
+                    localQueue.push(currentP1);
+                }
+                p1Input.value = selectedPlayer;
+            } else if (slot === 'p2') {
+                if (currentP2 && currentP2 !== "Player 2") {
+                    localQueue.push(currentP2);
+                }
+                p2Input.value = selectedPlayer;
+            }
+
+            renderQueueUI(localQueue);
+            await updateActiveMatch();
+            await syncQueue();
+        }
+
+        /* Combined +1 Win & King of the Hill Queue Advancement */
+        async function handleWinAndAdvance(winnerSlot) {
+            const winnerTag = winnerSlot === 'p1' ? p1Input.value.trim() : p2Input.value.trim();
+            if (!winnerTag || winnerTag === "Player 1" || winnerTag === "Player 2") return;
+
+            await fetch(`${API_BASE}/win`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ tag: winnerTag, amount: 1, auto_add: true })
+            });
+
+            if (localQueue.length > 0) {
+                const nextChallenger = localQueue.shift();
+                let losingPlayer = "";
+
+                if (winnerSlot === 'p1') {
+                    losingPlayer = p2Input.value.trim();
+                    p2Input.value = nextChallenger;
+                } else {
+                    losingPlayer = p1Input.value.trim();
+                    p1Input.value = p2Input.value.trim();
+                    p2Input.value = nextChallenger;
+                }
+
+                if (losingPlayer && losingPlayer !== "Player 1" && losingPlayer !== "Player 2") {
+                    localQueue.push(losingPlayer);
+                }
+
+                renderQueueUI(localQueue);
+                await updateActiveMatch();
+                await syncQueue();
+            }
+        }
+
+        async function undoActiveWin() {
+            const p1Tag = p1Input.value.trim();
+            const p2Tag = p2Input.value.trim();
+
+            await fetch(`${API_BASE}/win/undo`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ p1: p1Tag, p2: p2Tag })
+            });
+        }
+
+        async function addQueueWin(index) {
+            if (index < 0 || index >= localQueue.length) return;
+            const playerTag = localQueue[index];
+
+            await fetch(`${API_BASE}/win`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ tag: playerTag, amount: 1, auto_add: true })
+            });
+        }
+
+        async function undoQueueWin(index) {
+            if (index < 0 || index >= localQueue.length) return;
+            const playerTag = localQueue[index];
+
+            await fetch(`${API_BASE}/win/undo`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ tag: playerTag })
+            });
+        }
+
+        async function moveUp(index) {
+            if (index > 0) {
+                const item = localQueue.splice(index, 1)[0];
+                localQueue.splice(index - 1, 0, item);
+                renderQueueUI(localQueue);
+                await syncQueue();
+            }
+        }
+
+        async function moveDown(index) {
+            if (index < localQueue.length - 1) {
+                const item = localQueue.splice(index, 1)[0];
+                localQueue.splice(index + 1, 0, item);
+                renderQueueUI(localQueue);
+                await syncQueue();
+            }
+        }
+
+        function editItem(index) {
+            isEditingQueueItem = true;
+            const newName = prompt("Edit player tag:", localQueue[index]);
+            if (newName !== null && newName.trim() !== "") {
+                localQueue[index] = newName.trim();
+                renderQueueUI(localQueue);
+                syncQueue();
+            }
+            isEditingQueueItem = false;
+        }
+
+        async function updateActiveMatch() {
+            const payload = {
+                round: document.getElementById('roundLabel').value,
+                p1: p1Input.value,
+                p2: p2Input.value,
+                player1: p1Input.value,
+                player2: p2Input.value
+            };
+            await fetch(`${API_BASE}/match`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            syncState();
+        }
+
+        async function addPlayerToQueue() {
+            const name = queueInput.value.trim();
+            if (!name) return;
+            localQueue.push(name);
+            renderQueueUI(localQueue);
+            queueInput.value = '';
+            await syncQueue();
+        }
+
+        async function removeQueueIndex(index) {
+            if (index >= 0 && index < localQueue.length) {
+                localQueue.splice(index, 1);
+                renderQueueUI(localQueue);
+                await syncQueue();
+            }
+        }
+
+        async function clearQueue() {
+            localQueue = [];
+            renderQueueUI(localQueue);
+            await fetch(`${API_BASE}/queue/clear`, { method: 'POST' });
+        }
+
+        async function syncQueue() {
+            await fetch(`${API_BASE}/queue`, { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify(localQueue) 
+            });
+        }
+
+        /* Reset Modal Functions */
+        function openResetModal() {
+            document.getElementById('resetModal').style.display = 'flex';
+        }
+
+        function closeResetModal() {
+            document.getElementById('resetModal').style.display = 'none';
+        }
+
+        async function confirmReset(scope) {
+            if (confirm(`Are you sure you want to reset [ ${scope.toUpperCase()} ] standings?`)) {
+                try {
+                    await fetch(`${API_BASE}/standings/reset`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ scope: scope })
+                    });
+                    alert(`Successfully reset ${scope} standings.`);
+                } catch (e) {
+                    console.error("Reset error:", e);
+                }
+            }
+            closeResetModal();
+        }
+
+        /* Edit Player Modal Functions */
+        function openEditModal() {
+            document.getElementById('editOldTagInput').value = "";
+            document.getElementById('editNewTagInput').value = "";
+            document.getElementById('editModal').style.display = 'flex';
+            document.getElementById('editOldTagInput').focus();
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        async function confirmEditPlayer() {
+            const oldTag = document.getElementById('editOldTagInput').value.trim();
+            const newTag = document.getElementById('editNewTagInput').value.trim();
+            if (!oldTag || !newTag) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/standings/edit`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ old_tag: oldTag, new_tag: newTag })
+                });
+                if (res.ok) {
+                    alert(`Player "${oldTag}" successfully renamed to "${newTag}".`);
+                }
+            } catch (e) {
+                console.error("Edit player error:", e);
+            }
+
+            closeEditModal();
+        }
+
+        /* Delete Player Modal Functions */
+        function openDeleteModal() {
+            document.getElementById('deleteTagInput').value = "";
+            document.getElementById('deleteModal').style.display = 'flex';
+            document.getElementById('deleteTagInput').focus();
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('deleteModal').style.display = 'none';
+        }
+
+        async function confirmDeletePlayer() {
+            const tag = document.getElementById('deleteTagInput').value.trim();
+            if (!tag) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/standings/delete`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ tag: tag })
+                });
+                if (res.ok) {
+                    alert(`Player "${tag}" has been deleted from standings.`);
+                }
+            } catch (e) {
+                console.error("Delete player error:", e);
+            }
+
+            closeDeleteModal();
+        }
+
+        setInterval(syncState, 1000);
+        syncState();
+    </script>
+</body>
+</html>
