@@ -443,12 +443,16 @@ async def edit_player_tag(req: Request):
     new_tag = data.get("new_tag", "").strip()
     new_platform = data.get("platform", "").strip()
 
-    if not old_tag or not new_tag:
-        return {"status": "error", "message": "Missing tag parameters"}
+    if not old_tag:
+        return {"status": "error", "message": "Missing tag parameter"}
+    
+    if not new_tag:
+        new_tag = old_tag
 
     deleted_tags = load_deleted_tags()
-    deleted_tags.add(old_tag.lower())
-    save_deleted_tags(deleted_tags)
+    if new_tag.lower() != old_tag.lower():
+        deleted_tags.add(old_tag.lower())
+        save_deleted_tags(deleted_tags)
 
     all_s = get_all_standings()
 
@@ -480,7 +484,8 @@ async def edit_player_tag(req: Request):
     state["standings"] = master_list
 
     if t_master:
-        sync_to_google_sheet({"action": "delete", "tag": old_tag})
+        if new_tag.lower() != old_tag.lower():
+            sync_to_google_sheet({"action": "delete", "tag": old_tag})
         sync_to_google_sheet({
             "action": "update",
             "tag": t_master["tag"],
