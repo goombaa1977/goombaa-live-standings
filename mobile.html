@@ -320,8 +320,8 @@
                 <input type="text" id="editOldTagInput" placeholder="Old gamertag...">
             </div>
             <div class="field-group">
-                <label>New Tag</label>
-                <input type="text" id="editNewTagInput" placeholder="New gamertag...">
+                <label>New Tag (Optional)</label>
+                <input type="text" id="editNewTagInput" placeholder="Leave blank to keep same...">
             </div>
             <div class="field-group">
                 <label>Platform</label>
@@ -731,9 +731,11 @@
 
         async function confirmEditPlayer() {
             const oldTag = document.getElementById('editOldTagInput').value.trim();
-            const newTag = document.getElementById('editNewTagInput').value.trim();
+            let newTag = document.getElementById('editNewTagInput').value.trim();
             const platform = document.getElementById('editPlatformSelect').value;
-            if (!oldTag || !newTag) return;
+            
+            if (!oldTag) return;
+            if (!newTag) newTag = oldTag;
 
             try {
                 const res = await fetch(`${API_BASE}/standings/edit`, {
@@ -742,7 +744,7 @@
                     body: JSON.stringify({ old_tag: oldTag, new_tag: newTag, platform: platform })
                 });
                 if (res.ok) {
-                    alert(`Player "${oldTag}" successfully updated to "${newTag}" (${platform}).`);
+                    alert(`Player "${oldTag}" successfully updated (${platform}).`);
                 }
             } catch (e) {
                 console.error("Edit player error:", e);
