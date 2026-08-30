@@ -550,7 +550,12 @@
 
         /* Combined +1 Win & King of the Hill Queue Advancement */
         async function handleWinAndAdvance(winnerSlot) {
-            const winnerTag = winnerSlot === 'p1' ? p1Input.value.trim() : p2Input.value.trim();
+            const p1Tag = p1Input.value.trim();
+            const p2Tag = p2Input.value.trim();
+            
+            const winnerTag = winnerSlot === 'p1' ? p1Tag : p2Tag;
+            const loserTag = winnerSlot === 'p1' ? p2Tag : p1Tag;
+
             if (!winnerTag || winnerTag === "Player 1" || winnerTag === "Player 2") return;
 
             await fetch(`${API_BASE}/win`, {
@@ -561,25 +566,29 @@
 
             if (localQueue.length > 0) {
                 const nextChallenger = localQueue.shift();
-                let losingPlayer = "";
 
                 if (winnerSlot === 'p1') {
-                    losingPlayer = p2Input.value.trim();
                     p2Input.value = nextChallenger;
                 } else {
-                    losingPlayer = p1Input.value.trim();
-                    p1Input.value = p2Input.value.trim();
+                    p1Input.value = p2Tag;
                     p2Input.value = nextChallenger;
                 }
 
-                if (losingPlayer && losingPlayer !== "Player 1" && losingPlayer !== "Player 2") {
-                    localQueue.push(losingPlayer);
+                if (loserTag && loserTag !== "Player 1" && loserTag !== "Player 2") {
+                    localQueue.push(loserTag);
                 }
-
-                renderQueueUI(localQueue);
-                await updateActiveMatch();
-                await syncQueue();
+            } else {
+                if (winnerSlot === 'p1') {
+                    p2Input.value = loserTag;
+                } else {
+                    p1Input.value = p2Tag;
+                    p2Input.value = loserTag;
+                }
             }
+
+            renderQueueUI(localQueue);
+            await updateActiveMatch();
+            await syncQueue();
         }
 
         async function undoActiveWin() {
