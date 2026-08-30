@@ -558,12 +558,23 @@
 
             if (!winnerTag || winnerTag === "Player 1" || winnerTag === "Player 2") return;
 
+            // 1. Record win on backend
             await fetch(`${API_BASE}/win`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ tag: winnerTag, amount: 1, auto_add: true })
             });
 
+            // 2. Fetch fresh queue to prevent local stale array desyncs
+            try {
+                const queueRes = await fetch(`${API_BASE}/queue`);
+                const freshQueue = await queueRes.json();
+                if (Array.isArray(freshQueue)) {
+                    localQueue = freshQueue;
+                }
+            } catch (e) {}
+
+            // 3. Perform King of the Hill shift safely
             if (localQueue.length > 0) {
                 const nextChallenger = localQueue.shift();
 
@@ -574,7 +585,9 @@
                     p2Input.value = nextChallenger;
                 }
 
-                if (loserTag && loserTag !== "Player 1" && loserTag !== "Player 2" && !localQueue.includes(loserTag)) {
+                if (loserTag && loserTag !== "Player 1" && loserTag !== "Player 2" && 
+                    loserTag !== p1Input.value && loserTag !== p2Input.value && 
+                    !localQueue.includes(loserTag)) {
                     localQueue.push(loserTag);
                 }
             } else {
