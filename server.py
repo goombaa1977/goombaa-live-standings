@@ -1,7 +1,7 @@
 """
 Goombaa Control Center - Backend Web Server
 File: server.py
-Description: Full FastAPI backend with fixed KOTH queue rotation, tier-specific win tracking,
+Description: Full FastAPI backend with true King of the Hill queue rotation, tier-specific win tracking,
 non-blocking Google Sheets live sync, and full two-way communication.
 """
 
@@ -355,30 +355,38 @@ async def add_win(req: Request):
         "wins": int(updated_p.get("wins", 0))
     })
 
+    # True King of the Hill Queue Rotation Logic
+    p1_current = str(state["match"].get("p1") or state["match"].get("player1") or "").strip()
+    p2_current = str(state["match"].get("p2") or state["match"].get("player2") or "").strip()
+
+    if tag.lower() == p1_current.lower():
+        winner = p1_current
+        loser = p2_current
+    elif tag.lower() == p2_current.lower():
+        winner = p2_current
+        loser = p1_current
+    else:
+        winner = tag
+        loser = p2_current if tag.lower() != p2_current.lower() else p1_current
+
+    # Winner stays in P1 slot
+    state["match"]["p1"] = winner
+    state["match"]["player1"] = winner
+
+    # Pull next player from queue into P2 slot if queue has players
     if len(state["queue"]) > 0:
-        p1_current = str(state["match"].get("p1") or state["match"].get("player1") or "").strip()
-        p2_current = str(state["match"].get("p2") or state["match"].get("player2") or "").strip()
-        
-        next_player = state["queue"].pop(0)
+        next_challenger = state["queue"].pop(0)
+        state["match"]["p2"] = next_challenger
+        state["match"]["player2"] = next_challenger
+    else:
+        state["match"]["p2"] = "Player 2"
+        state["match"]["player2"] = "Player 2"
 
-        if tag.lower() == p2_current.lower():
-            current_loser = p1_current
-            state["match"]["p1"] = p2_current
-            state["match"]["player1"] = p2_current
-            state["match"]["p2"] = next_player
-            state["match"]["player2"] = next_player
-        elif tag.lower() == p1_current.lower():
-            current_loser = p2_current
-            state["match"]["p2"] = next_player
-            state["match"]["player2"] = next_player
-        else:
-            state["queue"].insert(0, next_player)
-            current_loser = None
+    # Send the loser to the back of the queue
+    if loser and loser not in ["Player 1", "Player 2", ""] and loser not in state["queue"]:
+        state["queue"].append(loser)
 
-        if current_loser and current_loser not in ["Player 1", "Player 2", ""] and current_loser not in state["queue"]:
-            state["queue"].append(current_loser)
-
-        save_json_file(QUEUE_FILE, state["queue"])
+    save_json_file(QUEUE_FILE, state["queue"])
 
     payload_full = {
         "daily": state["standings_daily"],
