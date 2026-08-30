@@ -265,12 +265,18 @@ async def clear_queue():
 async def next_match(winner: str = "p1"):
     if len(state["queue"]) > 0:
         next_player = state["queue"].pop(0)
+        current_loser = state["match"]["p1"] if winner == "p2" else state["match"]["p2"]
+        
         if winner == "p1":
             state["match"]["p2"] = next_player
             state["match"]["player2"] = next_player
         else:
             state["match"]["p1"] = next_player
             state["match"]["player1"] = next_player
+
+        if current_loser and current_loser not in ["Player 1", "Player 2"] and current_loser not in state["queue"]:
+            state["queue"].append(current_loser)
+
     await manager.broadcast("MATCH_UPDATE", state["match"])
     await manager.broadcast("QUEUE_UPDATE", state["queue"])
     await manager.broadcast("FULL_STATE", state)
