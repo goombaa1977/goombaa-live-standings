@@ -1,7 +1,7 @@
 """
 Goombaa Control Center - Backend Web Server
 File: server.py
-Description: Final robust FastAPI backend with automated King of the Hill win-rotation logic.
+Description: Final full FastAPI backend with correct front-of-queue rotation logic and instant local speed.
 """
 
 import os
@@ -260,7 +260,6 @@ async def add_win(req: Request):
     if not tag or tag in ["Player 1", "Player 2"]:
         return {"status": "ignored"}
 
-    # Update standings wins
     if tier_target == "daily":
         state["standings_daily"], _ = update_wins_in_list(state["standings_daily"], tag, amount)
         save_json_file(DAILY_FILE, state["standings_daily"])
@@ -275,26 +274,22 @@ async def add_win(req: Request):
         state["standings"] = state["standings_master"]
         save_json_file(MASTER_FILE, state["standings_master"])
 
-    # Automatically trigger King of the Hill rotation when a win is recorded
     if len(state["queue"]) > 0:
         p1_current = state["match"].get("p1") or state["match"].get("player1")
         p2_current = state["match"].get("p2") or state["match"].get("player2")
         next_player = state["queue"].pop(0)
 
-        # Check if the winner is Player 2
         if tag.lower() == str(p2_current).lower():
             current_loser = p1_current
             state["match"]["p1"] = p2_current
             state["match"]["player1"] = p2_current
             state["match"]["p2"] = next_player
             state["match"]["player2"] = next_player
-        # Otherwise if the winner is Player 1
         elif tag.lower() == str(p1_current).lower():
             current_loser = p2_current
             state["match"]["p2"] = next_player
             state["match"]["player2"] = next_player
         else:
-            # If tag doesn't match current active match players, put the challenger back
             state["queue"].insert(0, next_player)
             current_loser = None
 
