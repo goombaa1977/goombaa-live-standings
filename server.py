@@ -2,13 +2,15 @@
 Goombaa Control Center - Backend Web Server
 File: server.py
 Description: Full FastAPI backend with working King of the Hill logic, instant local speed, 
-and safe weekly auto-reset (preserving player names).
+safe weekly auto-reset, and full Google Sheets live two-way sync.
 """
 
 import os
 import sys
 import json
 import asyncio
+import urllib.request
+import urllib.parse
 from datetime import datetime
 from typing import List, Any, Dict
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
@@ -26,6 +28,8 @@ MONTHLY_FILE = os.path.join(SCRIPT_DIR, "standings_monthly.json")
 MASTER_FILE = os.path.join(SCRIPT_DIR, "standings.json")
 QUEUE_FILE = os.path.join(SCRIPT_DIR, "queue_cache.json")
 META_FILE = os.path.join(SCRIPT_DIR, "metadata.json")
+
+GOOGLE_SHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbys0_Xn7_xWLlIPMM5Dq99visJ7DcMlfDohkDv9nZR0Sn4E2ueWqwhyC41Aifb18enN_Q/exec"
 
 DEFAULT_STANDINGS = [
     {"tag": "Goombaa", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"},
@@ -65,6 +69,22 @@ def zero_out_wins_preserve_names(list_data: List[Dict[str, Any]]) -> List[Dict[s
         player["rank"] = "-"
     return list_data
 
+def post_to_google_sheets(payload: dict):
+    """Sends action payloads (update, delete, reset) to the Google Apps Script Web App."""
+    try:
+        data_encoded = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(
+            GOOGLE_SHEET_WEB_APP_URL,
+            data=data_encoded,
+            headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
+        )
+        with urllib.request.urlopen(req, timeout=5) as response:
+            res_data = json.loads(response.read().decode())
+            return res_data
+    except Exception as e:
+        print(f"Error communicating with Google Sheets Web App: {e}")
+        return {"status": "error", "message": str(e)}
+
 app = FastAPI(title="Goombaa Stream Control Center")
 
 app.add_middleware(
@@ -82,7 +102,6 @@ initial_master = load_json_file(MASTER_FILE, list(DEFAULT_STANDINGS))
 initial_queue = load_json_file(QUEUE_FILE, [])
 
 # Safe Weekly Auto-Check on Startup
-# Checks if the calendar week has changed since the last run; if so, zeroes weekly wins while preserving names.
 try:
     current_year, current_week, _ = datetime.now().isocalendar()
     metadata = load_json_file(META_FILE, {})
@@ -238,6 +257,40 @@ async def next_match(req: Request = None):
 
 @app.get("/api/standings")
 async def get_standings():
+    try:
+        # Fetch live data directly from your Google Sheet Web App
+        req = urllib.request.Request(GOOGLE_SHEET_WEB_APP_URL, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=4) as response:
+            data = json.loads(response.read().decode())
+            if data and ("daily" in data or "master" in data):
+                # Normalize keys/values to string types matching backend expectations
+                for tier_key in ["daily", "weekly", "monthly", "master"]:
+                    if tier_key in data:
+                        for p in data[tier_key]:
+                            p["wins"] = str(p.get("wins", "0"))
+                            p["points"] = "0"
+                
+                state["standings_daily"] = data.get("daily", state["standings_daily"])
+                state["standings_weekly"] = data.get("weekly", state["standings_weekly"])
+                state["standings_monthly"] = data.get("monthly", state["standings_monthly"])
+                state["standings_master"] = data.get("master", state["standings_master"])
+                state["standings"] = state["standings_master"]
+                
+                # Update local backup cache files
+                save_json_file(DAILY_FILE, state["standings_daily"])
+                save_json_file(WEEKLY_FILE, state["standings_weekly"])
+                save_json_file(MONTHLY_FILE, state["standings_monthly"])
+                save_json_file(MASTER_FILE, state["standings_master"])
+                
+                return {
+                    "daily": state["standings_daily"],
+                    "weekly": state["standings_weekly"],
+                    "monthly": state["standings_monthly"],
+                    "master": state["standings_master"]
+                }
+    except Exception as e:
+        print(f"Warning: Could not fetch live Google Sheet standings, using local cache: {e}")
+
     return {
         "daily": state["standings_daily"],
         "weekly": state["standings_weekly"],
@@ -287,19 +340,29 @@ async def add_win(req: Request):
     if not tag or tag in ["Player 1", "Player 2"]:
         return {"status": "ignored"}
 
+    # Update local memory & save json cache
     if tier_target == "daily":
-        state["standings_daily"], _ = update_wins_in_list(state["standings_daily"], tag, amount)
+        state["standings_daily"], updated_p = update_wins_in_list(state["standings_daily"], tag, amount)
         save_json_file(DAILY_FILE, state["standings_daily"])
     elif tier_target == "weekly":
-        state["standings_weekly"], _ = update_wins_in_list(state["standings_weekly"], tag, amount)
+        state["standings_weekly"], updated_p = update_wins_in_list(state["standings_weekly"], tag, amount)
         save_json_file(WEEKLY_FILE, state["standings_weekly"])
     elif tier_target == "monthly":
-        state["standings_monthly"], _ = update_wins_in_list(state["standings_monthly"], tag, amount)
+        state["standings_monthly"], updated_p = update_wins_in_list(state["standings_monthly"], tag, amount)
         save_json_file(MONTHLY_FILE, state["standings_monthly"])
     else:
-        state["standings_master"], _ = update_wins_in_list(state["standings_master"], tag, amount)
+        state["standings_master"], updated_p = update_wins_in_list(state["standings_master"], tag, amount)
         state["standings"] = state["standings_master"]
         save_json_file(MASTER_FILE, state["standings_master"])
+
+    # Push update to Google Sheets Web App
+    post_to_google_sheets({
+        "action": "update",
+        "tier": tier_target,
+        "tag": tag,
+        "platform": updated_p.get("platform", "Twitch"),
+        "wins": int(updated_p.get("wins", 0))
+    })
 
     if len(state["queue"]) > 0:
         p1_current = state["match"].get("p1") or state["match"].get("player1")
@@ -347,7 +410,10 @@ async def undo_win(req: Request):
     if not target_tag:
         return {"status": "error", "message": "Missing tag"}
 
+    updated_player_obj = None
+
     def undo_in_list(list_data):
+        nonlocal updated_player_obj
         for p in list_data:
             if p["tag"].lower() == target_tag.lower():
                 current_wins = int(p.get("wins", "0")) - 1
@@ -359,6 +425,7 @@ async def undo_win(req: Request):
                 elif w >= 51: p["rank"] = "Silver"
                 elif w >= 1: p["rank"] = "Bronze"
                 else: p["rank"] = "-"
+                updated_player_obj = p
                 break
         return list_data
 
@@ -375,6 +442,15 @@ async def undo_win(req: Request):
         state["standings_master"] = undo_in_list(state["standings_master"])
         state["standings"] = state["standings_master"]
         save_json_file(MASTER_FILE, state["standings_master"])
+
+    if updated_player_obj:
+        post_to_google_sheets({
+            "action": "update",
+            "tier": tier_target,
+            "tag": updated_player_obj.get("tag"),
+            "platform": updated_player_obj.get("platform", "Twitch"),
+            "wins": int(updated_player_obj.get("wins", 0))
+        })
 
     payload_full = {
         "daily": state["standings_daily"],
@@ -399,12 +475,16 @@ async def edit_player_tag(req: Request):
     if not new_tag:
         new_tag = old_tag
 
+    edited_player_obj = None
+
     def edit_in_list(list_data):
+        nonlocal edited_player_obj
         for p in list_data:
             if p["tag"].lower() == old_tag.lower():
                 p["tag"] = new_tag
                 if new_platform in ["Twitch", "TikTok", "YouTube"]:
                     p["platform"] = new_platform
+                edited_player_obj = p
                 break
         return list_data
 
@@ -421,6 +501,15 @@ async def edit_player_tag(req: Request):
         state["standings_master"] = edit_in_list(state["standings_master"])
         state["standings"] = state["standings_master"]
         save_json_file(MASTER_FILE, state["standings_master"])
+
+    if edited_player_obj:
+        post_to_google_sheets({
+            "action": "update",
+            "tier": tier_target,
+            "tag": edited_player_obj.get("tag"),
+            "platform": edited_player_obj.get("platform", "Twitch"),
+            "wins": int(edited_player_obj.get("wins", 0))
+        })
 
     payload_full = {
         "daily": state["standings_daily"],
@@ -454,6 +543,12 @@ async def delete_player_tag(req: Request):
         state["standings_master"] = [p for p in state["standings_master"] if p["tag"].lower() != tag.lower()]
         state["standings"] = state["standings_master"]
         save_json_file(MASTER_FILE, state["standings_master"])
+
+    post_to_google_sheets({
+        "action": "delete",
+        "tier": tier_target,
+        "tag": tag
+    })
 
     payload_full = {
         "daily": state["standings_daily"],
@@ -493,6 +588,9 @@ async def reset_standings(req: Request = None):
         save_json_file(WEEKLY_FILE, state["standings_weekly"])
         save_json_file(MONTHLY_FILE, state["standings_monthly"])
         save_json_file(MASTER_FILE, state["standings_master"])
+
+        for t in ["daily", "weekly", "monthly", "master"]:
+            post_to_google_sheets({"action": "reset", "tier": t})
     else:
         if scope == "daily":
             zero_out_list(state["standings_daily"])
@@ -507,6 +605,8 @@ async def reset_standings(req: Request = None):
             zero_out_list(state["standings_master"])
             state["standings"] = state["standings_master"]
             save_json_file(MASTER_FILE, state["standings_master"])
+
+        post_to_google_sheets({"action": "reset", "tier": scope})
 
     payload_full = {
         "daily": state["standings_daily"],
