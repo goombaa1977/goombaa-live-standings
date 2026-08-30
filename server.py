@@ -2,7 +2,7 @@
 Goombaa Control Center - Backend Web Server
 File: server.py
 Description: Full FastAPI backend with centralized backend KOTH slot rotation for both Player 1 and Player 2,
-precise win tallying across all tiers simultaneously, and instant non-blocking Google Sheets background sync.
+precise multi-tier win cascading, and sequential non-blocking Google Sheets background sync.
 """
 
 import os
@@ -347,7 +347,7 @@ async def add_win(req: Request):
     state["standings"] = state["standings_master"]
     save_json_file(MASTER_FILE, state["standings_master"])
 
-    # 2. Push updates to Google Sheets asynchronously in the background (removes the delay)
+    # 2. Push updates sequentially to Google Sheets in the background with tiny spacing so requests don't collide
     async def background_sync_sheets():
         for tier_key in ["daily", "weekly", "monthly", "master"]:
             tier_list = state.get(f"standings_{tier_key}", state["standings_master"])
@@ -360,6 +360,7 @@ async def add_win(req: Request):
                 "platform": p_obj.get("platform", "Twitch"),
                 "wins": int(p_obj.get("wins", 0))
             })
+            await asyncio.sleep(0.4) # Brief pause between requests to prevent Google Sheets drops
 
     asyncio.create_task(background_sync_sheets())
 
