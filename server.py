@@ -2,7 +2,7 @@
 Goombaa Control Center - Backend Web Server
 File: server.py
 Description: Full FastAPI backend with working King of the Hill logic, instant local speed, 
-safe weekly auto-reset, and full Google Sheets live two-way sync.
+safe weekly auto-reset, non-blocking Google Sheets live sync, and full two-way communication.
 """
 
 import os
@@ -258,38 +258,32 @@ async def next_match(req: Request = None):
 @app.get("/api/standings")
 async def get_standings():
     try:
-        # Fetch live data directly from your Google Sheet Web App
-        req = urllib.request.Request(GOOGLE_SHEET_WEB_APP_URL, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=4) as response:
-            data = json.loads(response.read().decode())
-            if data and ("daily" in data or "master" in data):
-                # Normalize keys/values to string types matching backend expectations
-                for tier_key in ["daily", "weekly", "monthly", "master"]:
-                    if tier_key in data:
-                        for p in data[tier_key]:
-                            p["wins"] = str(p.get("wins", "0"))
-                            p["points"] = "0"
-                
-                state["standings_daily"] = data.get("daily", state["standings_daily"])
-                state["standings_weekly"] = data.get("weekly", state["standings_weekly"])
-                state["standings_monthly"] = data.get("monthly", state["standings_monthly"])
-                state["standings_master"] = data.get("master", state["standings_master"])
-                state["standings"] = state["standings_master"]
-                
-                # Update local backup cache files
-                save_json_file(DAILY_FILE, state["standings_daily"])
-                save_json_file(WEEKLY_FILE, state["standings_weekly"])
-                save_json_file(MONTHLY_FILE, state["standings_monthly"])
-                save_json_file(MASTER_FILE, state["standings_master"])
-                
-                return {
-                    "daily": state["standings_daily"],
-                    "weekly": state["standings_weekly"],
-                    "monthly": state["standings_monthly"],
-                    "master": state["standings_master"]
-                }
+        def fetch_google():
+            req = urllib.request.Request(GOOGLE_SHEET_WEB_APP_URL, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=2) as response:
+                return json.loads(response.read().decode())
+
+        data = await asyncio.to_thread(fetch_google)
+        
+        if data and ("daily" in data or "master" in data):
+            for tier_key in ["daily", "weekly", "monthly", "master"]:
+                if tier_key in data:
+                    for p in data[tier_key]:
+                        p["wins"] = str(p.get("wins", "0"))
+                        p["points"] = "0"
+            
+            state["standings_daily"] = data.get("daily", state["standings_daily"])
+            state["standings_weekly"] = data.get("weekly", state["standings_weekly"])
+            state["standings_monthly"] = data.get("monthly", state["standings_monthly"])
+            state["standings_master"] = data.get("master", state["standings_master"])
+            state["standings"] = state["standings_master"]
+            
+            save_json_file(DAILY_FILE, state["standings_daily"])
+            save_json_file(WEEKLY_FILE, state["standings_weekly"])
+            save_json_file(MONTHLY_FILE, state["standings_monthly"])
+            save_json_file(MASTER_FILE, state["standings_master"])
     except Exception as e:
-        print(f"Warning: Could not fetch live Google Sheet standings, using local cache: {e}")
+        print(f"Notice: Google Sheets fetch skipped/timed out, serving local cache: {e}")
 
     return {
         "daily": state["standings_daily"],
