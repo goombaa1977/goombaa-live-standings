@@ -2,7 +2,7 @@
 Goombaa Control Center - Backend Web Server
 File: server.py
 Description: Full FastAPI backend with centralized backend KOTH slot rotation for both Player 1 and Player 2,
-precise win tallying, and non-blocking Google Sheets sync.
+precise win tallying across all tiers simultaneously, and non-blocking Google Sheets sync.
 """
 
 import os
@@ -327,42 +327,49 @@ async def add_win(req: Request):
     data = await req.json()
     tag = data.get("tag", "").strip()
     amount = int(data.get("amount", 1))
-    tier_target = str(data.get("tier", "master")).lower()
 
     if not tag or tag in ["Player 1", "Player 2"]:
         return {"status": "ignored"}
 
-    updated_p = None
-    if tier_target == "daily":
-        state["standings_daily"], updated_p = update_wins_in_list(state["standings_daily"], tag, amount)
-        save_json_file(DAILY_FILE, state["standings_daily"])
-    elif tier_target == "weekly":
-        state["standings_weekly"], updated_p = update_wins_in_list(state["standings_weekly"], tag, amount)
-        save_json_file(WEEKLY_FILE, state["standings_weekly"])
-    elif tier_target == "monthly":
-        state["standings_monthly"], updated_p = update_wins_in_list(state["standings_monthly"], tag, amount)
-        save_json_file(MONTHLY_FILE, state["standings_monthly"])
-    else:
-        tier_target = "master"
-        state["standings_master"], updated_p = update_wins_in_list(state["standings_master"], tag, amount)
-        state["standings"] = state["standings_master"]
-        save_json_file(MASTER_FILE, state["standings_master"])
+    # Update ALL tiers locally (Daily, Weekly, Monthly, Master) simultaneously
+    updated_p_master = None
+    
+    state["standings_daily"], _ = update_wins_in_list(state["standings_daily"], tag, amount)
+    save_json_file(DAILY_FILE, state["standings_daily"])
 
-    post_to_google_sheets({
-        "action": "update",
-        "tier": tier_target,
-        "tag": tag,
-        "platform": updated_p.get("platform", "Twitch"),
-        "wins": int(updated_p.get("wins", 0))
-    })
+    state["standings_weekly"], _ = update_wins_in_list(state["standings_weekly"], tag, amount)
+    save_json_file(WEEKLY_FILE, state["standings_weekly"])
 
-    # TRUTH SOURCE KOTH ROTATION ON BACKEND:
-    # Check if the winning tag belongs to Player 2 or Player 1, and rotate slots accordingly on the server.
+    state["standings_monthly"], _ = update_wins_in_list(state["standings_monthly"], tag, amount)
+    save_json_file(MONTHLY_FILE, state["standings_monthly"])
+
+    state["standings_master"], updated_p_master = update_wins_in_list(state["standings_master"], tag, amount)
+    state["standings"] = state["standings_master"]
+    save_json_file(MASTER_FILE, state["standings_master"])
+
+    # Push updates to Google Sheets for ALL four tiers so they stay completely in sync
+    for tier_key in ["daily", "weekly", "monthly", "master"]:
+        tier_list = state.get(f"standings_{tier_key}", state["standings_master"])
+        p_obj = next((p for p in tier_list if p["tag"].lower() == tag.lower()), updated_p_master)
+        
+        post_to_google_sheets({
+            "action": "update",
+            "tier": tier_key,
+            "tag": tag,
+            "platform": p_obj.get("platform", "Twitch"),
+            "wins": int(p_obj.get("wins", 0))
+        })
+
+    # --- PROTECTED KOTH ROTATION LOGIC (DO NOT ALTER) ---
     p1_current = str(state["match"].get("p1") or state["match"].get("player1") or "").strip()
     p2_current = str(state["match"].get("p2") or state["match"].get("player2") or "").strip()
 
+    if p1_current.lower() == p2_current.lower() and len(state["queue"]) > 0:
+        p2_current = state["queue"].pop(0)
+        state["match"]["p2"] = p2_current
+        state["match"]["player2"] = p2_current
+
     if tag.lower() == p2_current.lower():
-        # Player 2 wins: P2 moves to P1, old P1 goes to the back of the queue, next challenger takes P2
         loser = p1_current
         state["match"]["p1"] = p2_current
         state["match"]["player1"] = p2_current
@@ -381,7 +388,6 @@ async def add_win(req: Request):
         save_json_file(QUEUE_FILE, state["queue"])
 
     elif tag.lower() == p1_current.lower():
-        # Player 1 wins: P1 stays, old P2 goes to the back of the queue, next challenger takes P2
         loser = p2_current
 
         if len(state["queue"]) > 0:
@@ -396,6 +402,7 @@ async def add_win(req: Request):
             state["queue"].append(loser)
 
         save_json_file(QUEUE_FILE, state["queue"])
+    # --- END OF PROTECTED KOTH ROTATION LOGIC ---
 
     payload_full = {
         "daily": state["standings_daily"],
