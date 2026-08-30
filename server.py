@@ -1,7 +1,7 @@
 """
 Goombaa Control Center - Backend Web Server
 File: server.py
-Description: Final full FastAPI backend with strict front-queue pop logic and instant local speed.
+Description: Final full FastAPI backend with corrected queue pop direction and instant local speed.
 """
 
 import os
@@ -184,7 +184,8 @@ async def next_match(req: Request = None):
         pass
 
     if len(state["queue"]) > 0:
-        next_player = state["queue"].pop(0)
+        # Pull from the correct end of the queue array
+        next_player = state["queue"].pop()
         p1_current = state["match"].get("p1") or state["match"].get("player1")
         p2_current = state["match"].get("p2") or state["match"].get("player2")
 
@@ -200,7 +201,7 @@ async def next_match(req: Request = None):
             state["match"]["player2"] = next_player
 
         if current_loser and current_loser not in ["Player 1", "Player 2"] and current_loser not in state["queue"]:
-            state["queue"].append(current_loser)
+            state["queue"].insert(0, current_loser)
 
         save_json_file(QUEUE_FILE, state["queue"])
 
@@ -278,8 +279,8 @@ async def add_win(req: Request):
         p1_current = state["match"].get("p1") or state["match"].get("player1")
         p2_current = state["match"].get("p2") or state["match"].get("player2")
         
-        # Grab the absolute first person in the queue array
-        next_player = state["queue"].pop(0)
+        # Pull from the correct end of the queue array
+        next_player = state["queue"].pop()
 
         if tag.lower() == str(p2_current).lower():
             current_loser = p1_current
@@ -292,11 +293,11 @@ async def add_win(req: Request):
             state["match"]["p2"] = next_player
             state["match"]["player2"] = next_player
         else:
-            state["queue"].insert(0, next_player)
+            state["queue"].append(next_player)
             current_loser = None
 
         if current_loser and current_loser not in ["Player 1", "Player 2"] and current_loser not in state["queue"]:
-            state["queue"].append(current_loser)
+            state["queue"].insert(0, current_loser)
 
         save_json_file(QUEUE_FILE, state["queue"])
 
@@ -501,6 +502,7 @@ async def post_banner(req: Request):
     data = await req.json()
     state["banner"].update(data)
     await manager.broadcast("BANNER_UPDATE", state["banner"])
+    await manager.export_state if hasattr(state, 'export_state') else None
     await manager.broadcast("FULL_STATE", state)
     return state["banner"]
 
