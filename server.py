@@ -1,7 +1,7 @@
 """
 Goombaa Control Center - Backend Web Server
 File: server.py
-Description: Final full FastAPI backend with strict front-of-queue extraction and King of the Hill logic.
+Description: Final full FastAPI backend with strict front-queue pop logic and instant local speed.
 """
 
 import os
@@ -278,7 +278,7 @@ async def add_win(req: Request):
         p1_current = state["match"].get("p1") or state["match"].get("player1")
         p2_current = state["match"].get("p2") or state["match"].get("player2")
         
-        # Pull strictly from the front of the queue (index 0)
+        # Grab the absolute first person in the queue array
         next_player = state["queue"].pop(0)
 
         if tag.lower() == str(p2_current).lower():
