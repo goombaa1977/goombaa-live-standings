@@ -116,7 +116,7 @@ def save_json_file(filepath: str, data: List[Dict[str, Any]]):
         print(f"Error saving {filepath}: {e}")
 
 def get_all_standings(force_sheet_sync: bool = False) -> Dict[str, List[Dict[str, Any]]]:
-    if force_sheet_sync or not os.path.exists(MASTER_FILE):
+    if force_sheet_sync:
         master_data = fetch_master_from_sheet()
         save_json_file(MASTER_FILE, master_data)
     else:
@@ -157,7 +157,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-initial_standings = get_all_standings(force_sheet_sync=True)
+# FIXED: Load local files first on startup so saved wins are never overwritten by a sheet fetch failure
+initial_standings = get_all_standings(force_sheet_sync=False)
 
 state: Dict[str, Any] = {
     "match": {
