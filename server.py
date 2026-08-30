@@ -1,8 +1,8 @@
 """
 Goombaa Control Center - Backend Web Server
 File: server.py
-Description: Full FastAPI backend with true King of the Hill queue rotation, tier-specific win tracking,
-non-blocking Google Sheets live sync, and full two-way communication.
+Description: Full FastAPI backend with clean win recording, non-blocking Google Sheets sync,
+and full two-way communication (leaving queue/KOTH management entirely to frontend scripts).
 """
 
 import os
@@ -332,6 +332,7 @@ async def add_win(req: Request):
     if not tag or tag in ["Player 1", "Player 2"]:
         return {"status": "ignored"}
 
+    updated_p = None
     if tier_target == "daily":
         state["standings_daily"], updated_p = update_wins_in_list(state["standings_daily"], tag, amount)
         save_json_file(DAILY_FILE, state["standings_daily"])
@@ -355,39 +356,6 @@ async def add_win(req: Request):
         "wins": int(updated_p.get("wins", 0))
     })
 
-    # True King of the Hill Queue Rotation Logic
-    p1_current = str(state["match"].get("p1") or state["match"].get("player1") or "").strip()
-    p2_current = str(state["match"].get("p2") or state["match"].get("player2") or "").strip()
-
-    if tag.lower() == p1_current.lower():
-        winner = p1_current
-        loser = p2_current
-    elif tag.lower() == p2_current.lower():
-        winner = p2_current
-        loser = p1_current
-    else:
-        winner = tag
-        loser = p2_current if tag.lower() != p2_current.lower() else p1_current
-
-    # Winner stays in P1 slot
-    state["match"]["p1"] = winner
-    state["match"]["player1"] = winner
-
-    # Pull next player from queue into P2 slot if queue has players
-    if len(state["queue"]) > 0:
-        next_challenger = state["queue"].pop(0)
-        state["match"]["p2"] = next_challenger
-        state["match"]["player2"] = next_challenger
-    else:
-        state["match"]["p2"] = "Player 2"
-        state["match"]["player2"] = "Player 2"
-
-    # Send the loser to the back of the queue
-    if loser and loser not in ["Player 1", "Player 2", ""] and loser not in state["queue"]:
-        state["queue"].append(loser)
-
-    save_json_file(QUEUE_FILE, state["queue"])
-
     payload_full = {
         "daily": state["standings_daily"],
         "weekly": state["standings_weekly"],
@@ -395,10 +363,8 @@ async def add_win(req: Request):
         "master": state["standings_master"]
     }
     await manager.broadcast("STANDINGS_UPDATE", payload_full)
-    await manager.broadcast("MATCH_UPDATE", state["match"])
-    await manager.broadcast("QUEUE_UPDATE", state["queue"])
     await manager.broadcast("FULL_STATE", state)
-    return {"status": "success", "standings": payload_full, "match": state["match"], "queue": state["queue"]}
+    return {"status": "success", "standings": payload_full}
 
 @app.post("/api/win/undo")
 async def undo_win(req: Request):
@@ -683,6 +649,7 @@ async def serve_charity_overlay():
 
 @app.get("/overlay_horizontal.html")
 async def serve_horizontal_overlay():
+    file_path = os.path.join(SCRIPT_DIR, "overlay_horizontal.html")
     file_path = os.path.join(SCRIPT_DIR, "overlay_horizontal.html")
     if os.path.exists(file_path):
         return FileResponse(file_path)
