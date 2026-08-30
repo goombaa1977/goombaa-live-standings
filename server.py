@@ -1,7 +1,7 @@
 """
 Goombaa Control Center - Backend Web Server
 File: server.py
-Description: Lightning-fast local-first FastAPI backend for instant stream controls.
+Description: Final robust FastAPI backend with corrected King of the Hill rotation logic and instant local speed.
 """
 
 import os
@@ -23,7 +23,6 @@ WEEKLY_FILE = os.path.join(SCRIPT_DIR, "standings_weekly.json")
 MONTHLY_FILE = os.path.join(SCRIPT_DIR, "standings_monthly.json")
 MASTER_FILE = os.path.join(SCRIPT_DIR, "standings.json")
 QUEUE_FILE = os.path.join(SCRIPT_DIR, "queue_cache.json")
-DELETED_CACHE_FILE = os.path.join(SCRIPT_DIR, "deleted_tags.json")
 
 DEFAULT_STANDINGS = [
     {"tag": "Goombaa", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"},
@@ -180,21 +179,30 @@ async def next_match(req: Request = None):
     try:
         if req:
             body = await req.json()
-            winner = str(body.get("winner", "p1"))
+            winner = str(body.get("winner", "p1")).lower()
     except Exception:
         pass
 
     if len(state["queue"]) > 0:
         next_player = state["queue"].pop(0)
-        if winner.lower() == "p2":
+        
+        # True King of the Hill Rotation Logic:
+        # If P2 wins, P2 stays (or moves to P1) and old P1 goes to the bottom of the queue.
+        # If P1 wins, P1 stays and old P2 goes to the bottom of the queue, while the challenger steps into P2.
+        if winner == "p2" or winner == "player2":
             current_loser = state["match"].get("p1") or state["match"].get("player1")
-            state["match"]["p1"] = next_player
-            state["match"]["player1"] = next_player
+            # Winner takes/holds the table, next challenger comes in at P2
+            state["match"]["p1"] = state["match"].get("p2") or state["match"].get("player2")
+            state["match"]["player1"] = state["match"]["p1"]
+            state["match"]["p2"] = next_player
+            state["match"]["player2"] = next_player
         else:
             current_loser = state["match"].get("p2") or state["match"].get("player2")
+            # P1 holds the table, next challenger comes in at P2
             state["match"]["p2"] = next_player
             state["match"]["player2"] = next_player
 
+        # Send the defeated player to the bottom of the queue
         if current_loser and current_loser not in ["Player 1", "Player 2"] and current_loser not in state["queue"]:
             state["queue"].append(current_loser)
 
@@ -546,7 +554,7 @@ async def serve_dock_match():
     file_path = os.path.join(SCRIPT_DIR, "dock_match.html")
     if os.path.exists(file_path):
         return FileResponse(file_path)
-    return {"error": "dock_match.html file not found"}
+    return {"app": "dock_match.html file not found"}
 
 @app.get("/dock_broadcast.html")
 async def serve_dock_broadcast():
