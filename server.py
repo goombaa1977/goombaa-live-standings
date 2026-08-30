@@ -1,13 +1,15 @@
 """
 Goombaa Control Center - Backend Web Server
 File: server.py
-Description: Final full FastAPI backend with corrected queue pop direction and instant local speed.
+Description: Full FastAPI backend with working King of the Hill logic, instant local speed, 
+and safe weekly auto-reset (preserving player names).
 """
 
 import os
 import sys
 import json
 import asyncio
+from datetime import datetime
 from typing import List, Any, Dict
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,6 +25,7 @@ WEEKLY_FILE = os.path.join(SCRIPT_DIR, "standings_weekly.json")
 MONTHLY_FILE = os.path.join(SCRIPT_DIR, "standings_monthly.json")
 MASTER_FILE = os.path.join(SCRIPT_DIR, "standings.json")
 QUEUE_FILE = os.path.join(SCRIPT_DIR, "queue_cache.json")
+META_FILE = os.path.join(SCRIPT_DIR, "metadata.json")
 
 DEFAULT_STANDINGS = [
     {"tag": "Goombaa", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"},
@@ -54,6 +57,14 @@ def save_json_file(filepath: str, data: Any):
     except Exception as e:
         print(f"Error saving {filepath}: {e}")
 
+def zero_out_wins_preserve_names(list_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Zeroes out wins and ranks while keeping all player names and platforms intact."""
+    for player in list_data:
+        player["wins"] = "0"
+        player["points"] = "0"
+        player["rank"] = "-"
+    return list_data
+
 app = FastAPI(title="Goombaa Stream Control Center")
 
 app.add_middleware(
@@ -69,6 +80,22 @@ initial_weekly = load_json_file(WEEKLY_FILE, list(DEFAULT_STANDINGS))
 initial_monthly = load_json_file(MONTHLY_FILE, list(DEFAULT_STANDINGS))
 initial_master = load_json_file(MASTER_FILE, list(DEFAULT_STANDINGS))
 initial_queue = load_json_file(QUEUE_FILE, [])
+
+# Safe Weekly Auto-Check on Startup
+# Checks if the calendar week has changed since the last run; if so, zeroes weekly wins while preserving names.
+try:
+    current_year, current_week, _ = datetime.now().isocalendar()
+    metadata = load_json_file(META_FILE, {})
+    last_week = metadata.get("last_weekly_reset_week")
+    
+    if last_week != current_week:
+        initial_weekly = zero_out_wins_preserve_names(initial_weekly)
+        save_json_file(WEEKLY_FILE, initial_weekly)
+        metadata["last_weekly_reset_week"] = current_week
+        save_json_file(META_FILE, metadata)
+        print(f"[Goombaa Control Center] New week detected ({current_week}). Weekly standings safely reset (names preserved).")
+except Exception as e:
+    print(f"Error checking weekly reset: {e}")
 
 state: Dict[str, Any] = {
     "match": {
@@ -184,8 +211,7 @@ async def next_match(req: Request = None):
         pass
 
     if len(state["queue"]) > 0:
-        # Pull from the correct end of the queue array
-        next_player = state["queue"].pop()
+        next_player = state["queue"].pop(0)
         p1_current = state["match"].get("p1") or state["match"].get("player1")
         p2_current = state["match"].get("p2") or state["match"].get("player2")
 
@@ -201,7 +227,7 @@ async def next_match(req: Request = None):
             state["match"]["player2"] = next_player
 
         if current_loser and current_loser not in ["Player 1", "Player 2"] and current_loser not in state["queue"]:
-            state["queue"].insert(0, current_loser)
+            state["queue"].append(current_loser)
 
         save_json_file(QUEUE_FILE, state["queue"])
 
@@ -279,8 +305,7 @@ async def add_win(req: Request):
         p1_current = state["match"].get("p1") or state["match"].get("player1")
         p2_current = state["match"].get("p2") or state["match"].get("player2")
         
-        # Pull from the correct end of the queue array
-        next_player = state["queue"].pop()
+        next_player = state["queue"].pop(0)
 
         if tag.lower() == str(p2_current).lower():
             current_loser = p1_current
@@ -293,11 +318,11 @@ async def add_win(req: Request):
             state["match"]["p2"] = next_player
             state["match"]["player2"] = next_player
         else:
-            state["queue"].append(next_player)
+            state["queue"].insert(0, next_player)
             current_loser = None
 
         if current_loser and current_loser not in ["Player 1", "Player 2"] and current_loser not in state["queue"]:
-            state["queue"].insert(0, current_loser)
+            state["queue"].append(current_loser)
 
         save_json_file(QUEUE_FILE, state["queue"])
 
@@ -502,7 +527,6 @@ async def post_banner(req: Request):
     data = await req.json()
     state["banner"].update(data)
     await manager.broadcast("BANNER_UPDATE", state["banner"])
-    await manager.export_state if hasattr(state, 'export_state') else None
     await manager.broadcast("FULL_STATE", state)
     return state["banner"]
 
