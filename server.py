@@ -1,8 +1,8 @@
 """
 Goombaa Control Center - Backend Web Server
 File: server.py
-Description: Full FastAPI backend with centralized KOTH slot rotation for both Player 1 and Player 2,
-non-blocking Google Sheets sync, and full two-way communication.
+Description: Full FastAPI backend with clean win recording and Google Sheets sync, 
+letting frontend handle KOTH match/queue rotation seamlessly without conflicts.
 """
 
 import os
@@ -356,46 +356,6 @@ async def add_win(req: Request):
         "wins": int(updated_p.get("wins", 0))
     })
 
-    # Robust Backend KOTH Rotation: Handle both Player 1 and Player 2 wins cleanly on the server
-    p1_current = str(state["match"].get("p1") or state["match"].get("player1") or "").strip()
-    p2_current = str(state["match"].get("p2") or state["match"].get("player2") or "").strip()
-
-    if tag.lower() == p2_current.lower():
-        # Player 2 wins: P2 moves up to P1, old P1 goes to the queue, next queue player takes P2
-        loser = p1_current
-        state["match"]["p1"] = p2_current
-        state["match"]["player1"] = p2_current
-        
-        if len(state["queue"]) > 0:
-            next_challenger = state["queue"].pop(0)
-            state["match"]["p2"] = next_challenger
-            state["match"]["player2"] = next_challenger
-        else:
-            state["match"]["p2"] = "Player 2"
-            state["match"]["player2"] = "Player 2"
-
-        if loser and loser not in ["Player 1", "Player 2", ""] and loser not in state["queue"]:
-            state["queue"].append(loser)
-            
-        save_json_file(QUEUE_FILE, state["queue"])
-
-    elif tag.lower() == p1_current.lower():
-        # Player 1 wins: P1 stays, old P2 goes to the queue, next queue player takes P2
-        loser = p2_current
-        
-        if len(state["queue"]) > 0:
-            next_challenger = state["queue"].pop(0)
-            state["match"]["p2"] = next_challenger
-            state["match"]["player2"] = next_challenger
-        else:
-            state["match"]["p2"] = "Player 2"
-            state["match"]["player2"] = "Player 2"
-
-        if loser and loser not in ["Player 1", "Player 2", ""] and loser not in state["queue"]:
-            state["queue"].append(loser)
-            
-        save_json_file(QUEUE_FILE, state["queue"])
-
     payload_full = {
         "daily": state["standings_daily"],
         "weekly": state["standings_weekly"],
@@ -403,10 +363,8 @@ async def add_win(req: Request):
         "master": state["standings_master"]
     }
     await manager.broadcast("STANDINGS_UPDATE", payload_full)
-    await manager.broadcast("MATCH_UPDATE", state["match"])
-    await manager.broadcast("QUEUE_UPDATE", state["queue"])
     await manager.broadcast("FULL_STATE", state)
-    return {"status": "success", "standings": payload_full, "match": state["match"], "queue": state["queue"]}
+    return {"status": "success", "standings": payload_full}
 
 @app.post("/api/win/undo")
 async def undo_win(req: Request):
