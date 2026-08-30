@@ -1,7 +1,7 @@
 """
 Goombaa Control Center - Backend Web Server
 File: server.py
-Description: Final robust FastAPI backend with corrected King of the Hill rotation logic and instant local speed.
+Description: Final robust FastAPI backend with automated King of the Hill win-rotation logic.
 """
 
 import os
@@ -185,24 +185,20 @@ async def next_match(req: Request = None):
 
     if len(state["queue"]) > 0:
         next_player = state["queue"].pop(0)
-        
-        # True King of the Hill Rotation Logic:
-        # If P2 wins, P2 stays (or moves to P1) and old P1 goes to the bottom of the queue.
-        # If P1 wins, P1 stays and old P2 goes to the bottom of the queue, while the challenger steps into P2.
+        p1_current = state["match"].get("p1") or state["match"].get("player1")
+        p2_current = state["match"].get("p2") or state["match"].get("player2")
+
         if winner == "p2" or winner == "player2":
-            current_loser = state["match"].get("p1") or state["match"].get("player1")
-            # Winner takes/holds the table, next challenger comes in at P2
-            state["match"]["p1"] = state["match"].get("p2") or state["match"].get("player2")
-            state["match"]["player1"] = state["match"]["p1"]
+            current_loser = p1_current
+            state["match"]["p1"] = p2_current
+            state["match"]["player1"] = p2_current
             state["match"]["p2"] = next_player
             state["match"]["player2"] = next_player
         else:
-            current_loser = state["match"].get("p2") or state["match"].get("player2")
-            # P1 holds the table, next challenger comes in at P2
+            current_loser = p2_current
             state["match"]["p2"] = next_player
             state["match"]["player2"] = next_player
 
-        # Send the defeated player to the bottom of the queue
         if current_loser and current_loser not in ["Player 1", "Player 2"] and current_loser not in state["queue"]:
             state["queue"].append(current_loser)
 
@@ -264,6 +260,7 @@ async def add_win(req: Request):
     if not tag or tag in ["Player 1", "Player 2"]:
         return {"status": "ignored"}
 
+    # Update standings wins
     if tier_target == "daily":
         state["standings_daily"], _ = update_wins_in_list(state["standings_daily"], tag, amount)
         save_json_file(DAILY_FILE, state["standings_daily"])
@@ -278,6 +275,34 @@ async def add_win(req: Request):
         state["standings"] = state["standings_master"]
         save_json_file(MASTER_FILE, state["standings_master"])
 
+    # Automatically trigger King of the Hill rotation when a win is recorded
+    if len(state["queue"]) > 0:
+        p1_current = state["match"].get("p1") or state["match"].get("player1")
+        p2_current = state["match"].get("p2") or state["match"].get("player2")
+        next_player = state["queue"].pop(0)
+
+        # Check if the winner is Player 2
+        if tag.lower() == str(p2_current).lower():
+            current_loser = p1_current
+            state["match"]["p1"] = p2_current
+            state["match"]["player1"] = p2_current
+            state["match"]["p2"] = next_player
+            state["match"]["player2"] = next_player
+        # Otherwise if the winner is Player 1
+        elif tag.lower() == str(p1_current).lower():
+            current_loser = p2_current
+            state["match"]["p2"] = next_player
+            state["match"]["player2"] = next_player
+        else:
+            # If tag doesn't match current active match players, put the challenger back
+            state["queue"].insert(0, next_player)
+            current_loser = None
+
+        if current_loser and current_loser not in ["Player 1", "Player 2"] and current_loser not in state["queue"]:
+            state["queue"].append(current_loser)
+
+        save_json_file(QUEUE_FILE, state["queue"])
+
     payload_full = {
         "daily": state["standings_daily"],
         "weekly": state["standings_weekly"],
@@ -285,8 +310,10 @@ async def add_win(req: Request):
         "master": state["standings_master"]
     }
     await manager.broadcast("STANDINGS_UPDATE", payload_full)
+    await manager.broadcast("MATCH_UPDATE", state["match"])
+    await manager.broadcast("QUEUE_UPDATE", state["queue"])
     await manager.broadcast("FULL_STATE", state)
-    return {"status": "success", "standings": payload_full}
+    return {"status": "success", "standings": payload_full, "match": state["match"], "queue": state["queue"]}
 
 @app.post("/api/win/undo")
 async def undo_win(req: Request):
