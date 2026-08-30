@@ -441,6 +441,7 @@ async def edit_player_tag(req: Request):
     data = await req.json()
     old_tag = data.get("old_tag", "").strip()
     new_tag = data.get("new_tag", "").strip()
+    new_platform = data.get("platform", "").strip()
 
     if not old_tag or not new_tag:
         return {"status": "error", "message": "Missing tag parameters"}
@@ -456,6 +457,8 @@ async def edit_player_tag(req: Request):
         for p in list_data:
             if p["tag"].lower() == old_tag.lower():
                 p["tag"] = new_tag
+                if new_platform in ["Twitch", "TikTok", "YouTube"]:
+                    p["platform"] = new_platform
                 target = p
                 break
         return list_data, target
