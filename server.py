@@ -1,8 +1,8 @@
 """
 Goombaa Control Center - Backend Web Server
 File: server.py
-Description: Full FastAPI backend with working King of the Hill logic, instant local speed, 
-safe weekly auto-reset, non-blocking Google Sheets live sync, and full two-way communication.
+Description: Full FastAPI backend with fixed KOTH queue rotation, tier-specific win tracking,
+non-blocking Google Sheets live sync, and full two-way communication.
 """
 
 import os
@@ -62,7 +62,6 @@ def save_json_file(filepath: str, data: Any):
         print(f"Error saving {filepath}: {e}")
 
 def zero_out_wins_preserve_names(list_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Zeroes out wins and ranks while keeping all player names and platforms intact."""
     for player in list_data:
         player["wins"] = "0"
         player["points"] = "0"
@@ -70,7 +69,6 @@ def zero_out_wins_preserve_names(list_data: List[Dict[str, Any]]) -> List[Dict[s
     return list_data
 
 def post_to_google_sheets(payload: dict):
-    """Sends action payloads (update, delete, reset) to the Google Apps Script Web App."""
     try:
         data_encoded = json.dumps(payload).encode('utf-8')
         req = urllib.request.Request(
@@ -112,7 +110,7 @@ try:
         save_json_file(WEEKLY_FILE, initial_weekly)
         metadata["last_weekly_reset_week"] = current_week
         save_json_file(META_FILE, metadata)
-        print(f"[Goombaa Control Center] New week detected ({current_week}). Weekly standings safely reset (names preserved).")
+        print(f"[Goombaa Control Center] New week detected ({current_week}). Weekly standings safely reset.")
 except Exception as e:
     print(f"Error checking weekly reset: {e}")
 
@@ -329,12 +327,12 @@ async def add_win(req: Request):
     data = await req.json()
     tag = data.get("tag", "").strip()
     amount = int(data.get("amount", 1))
-    tier_target = data.get("tier", "master").lower()
+    tier_target = str(data.get("tier", "master")).lower()
 
     if not tag or tag in ["Player 1", "Player 2"]:
         return {"status": "ignored"}
 
-    # Update local memory & save json cache
+    # Update correct tier list in local memory & save json cache
     if tier_target == "daily":
         state["standings_daily"], updated_p = update_wins_in_list(state["standings_daily"], tag, amount)
         save_json_file(DAILY_FILE, state["standings_daily"])
@@ -345,11 +343,12 @@ async def add_win(req: Request):
         state["standings_monthly"], updated_p = update_wins_in_list(state["standings_monthly"], tag, amount)
         save_json_file(MONTHLY_FILE, state["standings_monthly"])
     else:
+        tier_target = "master"
         state["standings_master"], updated_p = update_wins_in_list(state["standings_master"], tag, amount)
         state["standings"] = state["standings_master"]
         save_json_file(MASTER_FILE, state["standings_master"])
 
-    # Push update to Google Sheets Web App
+    # Push update to Google Sheets Web App for the specific tier
     post_to_google_sheets({
         "action": "update",
         "tier": tier_target,
@@ -358,19 +357,20 @@ async def add_win(req: Request):
         "wins": int(updated_p.get("wins", 0))
     })
 
+    # Fixed KOTH / Queue Rotation Logic
     if len(state["queue"]) > 0:
-        p1_current = state["match"].get("p1") or state["match"].get("player1")
-        p2_current = state["match"].get("p2") or state["match"].get("player2")
+        p1_current = str(state["match"].get("p1") or state["match"].get("player1") or "").strip()
+        p2_current = str(state["match"].get("p2") or state["match"].get("player2") or "").strip()
         
         next_player = state["queue"].pop(0)
 
-        if tag.lower() == str(p2_current).lower():
+        if tag.lower() == p2_current.lower():
             current_loser = p1_current
             state["match"]["p1"] = p2_current
             state["match"]["player1"] = p2_current
             state["match"]["p2"] = next_player
             state["match"]["player2"] = next_player
-        elif tag.lower() == str(p1_current).lower():
+        elif tag.lower() == p1_current.lower():
             current_loser = p2_current
             state["match"]["p2"] = next_player
             state["match"]["player2"] = next_player
@@ -378,7 +378,7 @@ async def add_win(req: Request):
             state["queue"].insert(0, next_player)
             current_loser = None
 
-        if current_loser and current_loser not in ["Player 1", "Player 2"] and current_loser not in state["queue"]:
+        if current_loser and current_loser not in ["Player 1", "Player 2", ""] and current_loser not in state["queue"]:
             state["queue"].append(current_loser)
 
         save_json_file(QUEUE_FILE, state["queue"])
@@ -399,7 +399,7 @@ async def add_win(req: Request):
 async def undo_win(req: Request):
     data = await req.json()
     target_tag = data.get("tag", "").strip()
-    tier_target = data.get("tier", "master").lower()
+    tier_target = str(data.get("tier", "master")).lower()
 
     if not target_tag:
         return {"status": "error", "message": "Missing tag"}
@@ -433,6 +433,7 @@ async def undo_win(req: Request):
         state["standings_monthly"] = undo_in_list(state["standings_monthly"])
         save_json_file(MONTHLY_FILE, state["standings_monthly"])
     else:
+        tier_target = "master"
         state["standings_master"] = undo_in_list(state["standings_master"])
         state["standings"] = state["standings_master"]
         save_json_file(MASTER_FILE, state["standings_master"])
@@ -462,7 +463,7 @@ async def edit_player_tag(req: Request):
     old_tag = data.get("old_tag", "").strip()
     new_tag = data.get("new_tag", "").strip()
     new_platform = data.get("platform", "").strip()
-    tier_target = data.get("tier", "master").lower()
+    tier_target = str(data.get("tier", "master")).lower()
 
     if not old_tag:
         return {"status": "error", "message": "Missing tag parameter"}
@@ -492,6 +493,7 @@ async def edit_player_tag(req: Request):
         state["standings_monthly"] = edit_in_list(state["standings_monthly"])
         save_json_file(MONTHLY_FILE, state["standings_monthly"])
     else:
+        tier_target = "master"
         state["standings_master"] = edit_in_list(state["standings_master"])
         state["standings"] = state["standings_master"]
         save_json_file(MASTER_FILE, state["standings_master"])
@@ -519,7 +521,7 @@ async def edit_player_tag(req: Request):
 async def delete_player_tag(req: Request):
     data = await req.json()
     tag = data.get("tag", "").strip()
-    tier_target = data.get("tier", "master").lower()
+    tier_target = str(data.get("tier", "master")).lower()
 
     if not tag:
         return {"status": "error", "message": "Missing tag parameter"}
@@ -534,6 +536,7 @@ async def delete_player_tag(req: Request):
         state["standings_monthly"] = [p for p in state["standings_monthly"] if p["tag"].lower() != tag.lower()]
         save_json_file(MONTHLY_FILE, state["standings_monthly"])
     else:
+        tier_target = "master"
         state["standings_master"] = [p for p in state["standings_master"] if p["tag"].lower() != tag.lower()]
         state["standings"] = state["standings_master"]
         save_json_file(MASTER_FILE, state["standings_master"])
@@ -560,7 +563,7 @@ async def reset_standings(req: Request = None):
     try:
         if req:
             body = await req.json()
-            scope = body.get("scope", "daily")
+            scope = str(body.get("scope", "daily")).lower()
     except Exception:
         pass
 
@@ -596,6 +599,7 @@ async def reset_standings(req: Request = None):
             zero_out_list(state["standings_monthly"])
             save_json_file(MONTHLY_FILE, state["standings_monthly"])
         else:
+            scope = "master"
             zero_out_list(state["standings_master"])
             state["standings"] = state["standings_master"]
             save_json_file(MASTER_FILE, state["standings_master"])
@@ -707,7 +711,7 @@ async def serve_dock_broadcast():
         return FileResponse(file_path)
     return {"error": "dock_broadcast.html file not found"}
 
-app.mount("/", StaticFiles(directory=SCRIPT_DIR, html=True), name="static")
+@app.mount("/", StaticFiles(directory=SCRIPT_DIR, html=True), name="static")
 
 if __name__ == "__main__":
     print("[Goombaa Control Center] Running on http://0.0.0.0:8000")
