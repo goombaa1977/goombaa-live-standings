@@ -67,7 +67,7 @@
             align-items: center;
         }
 
-        input[type="text"] {
+        input[type="text"], select {
             background: var(--input-bg);
             border: 1px solid var(--border-color);
             border-radius: 5px;
@@ -80,6 +80,12 @@
             user-select: text;
             transition: border-color 0.2s, background-color 0.2s;
             flex: 1;
+            width: 100%;
+        }
+
+        select option {
+            background: var(--input-bg);
+            color: var(--text-main);
         }
 
         input[type="text"].drop-hover {
@@ -308,7 +314,7 @@
     <!-- Edit Player Modal Popup -->
     <div id="editModal" class="modal-overlay">
         <div class="modal-content">
-            <div class="modal-title" style="color: var(--accent-orange);">Edit Player Tag</div>
+            <div class="modal-title" style="color: var(--accent-orange);">Edit Player Tag & Platform</div>
             <div class="field-group">
                 <label>Current Tag</label>
                 <input type="text" id="editOldTagInput" placeholder="Old gamertag...">
@@ -316,6 +322,14 @@
             <div class="field-group">
                 <label>New Tag</label>
                 <input type="text" id="editNewTagInput" placeholder="New gamertag...">
+            </div>
+            <div class="field-group">
+                <label>Platform</label>
+                <select id="editPlatformSelect">
+                    <option value="Twitch">Twitch</option>
+                    <option value="TikTok">TikTok</option>
+                    <option value="YouTube">YouTube</option>
+                </select>
             </div>
             <div class="btn-group" style="margin-top: 4px;">
                 <button class="btn-orange" style="flex:1" onclick="confirmEditPlayer()">Save</button>
@@ -706,6 +720,7 @@
         function openEditModal() {
             document.getElementById('editOldTagInput').value = "";
             document.getElementById('editNewTagInput').value = "";
+            document.getElementById('editPlatformSelect').value = "Twitch";
             document.getElementById('editModal').style.display = 'flex';
             document.getElementById('editOldTagInput').focus();
         }
@@ -717,16 +732,17 @@
         async function confirmEditPlayer() {
             const oldTag = document.getElementById('editOldTagInput').value.trim();
             const newTag = document.getElementById('editNewTagInput').value.trim();
+            const platform = document.getElementById('editPlatformSelect').value;
             if (!oldTag || !newTag) return;
 
             try {
                 const res = await fetch(`${API_BASE}/standings/edit`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ old_tag: oldTag, new_tag: newTag })
+                    body: JSON.stringify({ old_tag: oldTag, new_tag: newTag, platform: platform })
                 });
                 if (res.ok) {
-                    alert(`Player "${oldTag}" successfully renamed to "${newTag}".`);
+                    alert(`Player "${oldTag}" successfully updated to "${newTag}" (${platform}).`);
                 }
             } catch (e) {
                 console.error("Edit player error:", e);
