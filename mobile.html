@@ -574,7 +574,7 @@
                     p2Input.value = nextChallenger;
                 }
 
-                if (loserTag && loserTag !== "Player 1" && loserTag !== "Player 2") {
+                if (loserTag && loserTag !== "Player 1" && loserTag !== "Player 2" && !localQueue.includes(loserTag)) {
                     localQueue.push(loserTag);
                 }
             } else {
