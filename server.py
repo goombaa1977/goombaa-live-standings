@@ -1,14 +1,12 @@
 """
 Goombaa Control Center - Backend Web Server
 File: server.py
-Description: FastAPI backend supporting Daily, Weekly, Monthly, and Master standings tiers, match management, queue, broadcast banners, co-hosts, charity goals, and full OBS dock routing.
+Description: FastAPI backend supporting Daily, Weekly, Monthly, and Master standings tiers synced directly with Google Sheets.
 """
 
 import os
 import sys
 import json
-import csv
-import io
 import urllib.request
 import asyncio
 from typing import List, Any, Dict
@@ -21,13 +19,7 @@ import uvicorn
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(SCRIPT_DIR)
 
-DAILY_FILE = os.path.join(SCRIPT_DIR, "standings_daily.json")
-WEEKLY_FILE = os.path.join(SCRIPT_DIR, "standings_weekly.json")
-MONTHLY_FILE = os.path.join(SCRIPT_DIR, "standings_monthly.json")
-MASTER_FILE = os.path.join(SCRIPT_DIR, "standings.json")
-
 DELETED_CACHE_FILE = os.path.join(SCRIPT_DIR, "deleted_tags.json")
-SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/1RWCtWhZ0f0paF7633Re8DyZiYgS9_tk-bP1fPnSd1E8/export?format=csv"
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbys0_Xn7_xWLlIPMM5Dq99visJ7DcMlfDohkDv9nZR0Sn4E2ueWqwhyC41Aifb18enN_Q/exec"
 
 DEFAULT_STANDINGS = [
@@ -60,77 +52,27 @@ def save_deleted_tags(deleted_set: set):
     except Exception as e:
         print(f"Error saving deleted tags cache: {e}")
 
-def fetch_master_from_sheet() -> List[Dict[str, Any]]:
+def fetch_standings_from_sheet() -> Dict[str, List[Dict[str, Any]]]:
     deleted_tags = load_deleted_tags()
     try:
-        req = urllib.request.Request(SHEET_CSV_URL, headers={'Cache-Control': 'no-cache', 'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=5) as response:
-            csv_data = response.read().decode('utf-8')
-            reader = csv.DictReader(io.StringIO(csv_data))
-            
-            formatted_standings = []
-            for row in reader:
-                tag = str(row.get("Gamertag") or row.get("tag") or "").strip()
-                if not tag or tag.lower() in deleted_tags:
-                    continue
-
-                platform = str(row.get("Platform") or row.get("platform") or "Twitch").strip()
-                wins = str(row.get("Wins") or row.get("wins") or "0").strip()
-                
-                w = int(wins) if wins.isdigit() else 0
-                if w >= 151: r_tier = "Platinum"
-                elif w >= 101: r_tier = "Gold"
-                elif w >= 51: r_tier = "Silver"
-                elif w >= 1: r_tier = "Bronze"
-                else: r_tier = "-"
-
-                formatted_standings.append({
-                    "tag": tag,
-                    "platform": platform,
-                    "wins": str(w),
-                    "points": "0",
-                    "rank": r_tier
-                })
-            if formatted_standings:
-                return formatted_standings
+        req = urllib.request.Request(APPS_SCRIPT_URL, headers={'Cache-Control': 'no-cache', 'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=8) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            if data and "error" not in data:
+                result = {}
+                for tier in ["daily", "weekly", "monthly", "master"]:
+                    tier_list = data.get(tier, [])
+                    filtered = [p for p in tier_list if p.get("tag", "").strip().lower() not in deleted_tags]
+                    result[tier] = filtered if filtered else list(DEFAULT_STANDINGS)
+                return result
     except Exception as e:
-        print(f"Warning: Could not fetch Google Sheet CSV ({e}).")
-    return DEFAULT_STANDINGS
-
-def load_json_file(filepath: str, fallback_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    if os.path.exists(filepath):
-        try:
-            with open(filepath, "r") as f:
-                data = json.load(f)
-                if isinstance(data, list) and len(data) > 0:
-                    return data
-        except Exception:
-            pass
-    return fallback_data
-
-def save_json_file(filepath: str, data: List[Dict[str, Any]]):
-    try:
-        with open(filepath, "w") as f:
-            json.dump(data, f, indent=4)
-    except Exception as e:
-        print(f"Error saving {filepath}: {e}")
-
-def get_all_standings(force_sheet_sync: bool = False) -> Dict[str, List[Dict[str, Any]]]:
-    if force_sheet_sync:
-        master_data = fetch_master_from_sheet()
-        save_json_file(MASTER_FILE, master_data)
-    else:
-        master_data = load_json_file(MASTER_FILE, DEFAULT_STANDINGS)
-    
-    daily_data = load_json_file(DAILY_FILE, [])
-    weekly_data = load_json_file(WEEKLY_FILE, [])
-    monthly_data = load_json_file(MONTHLY_FILE, [])
+        print(f"Warning: Could not fetch standings from Google Sheet Web App ({e}).")
     
     return {
-        "daily": daily_data,
-        "weekly": weekly_data,
-        "monthly": monthly_data,
-        "master": master_data
+        "daily": list(DEFAULT_STANDINGS),
+        "weekly": list(DEFAULT_STANDINGS),
+        "monthly": list(DEFAULT_STANDINGS),
+        "master": list(DEFAULT_STANDINGS)
     }
 
 def sync_to_google_sheet(payload: dict):
@@ -157,8 +99,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# FIXED: Load local files first on startup so saved wins are never overwritten by a sheet fetch failure
-initial_standings = get_all_standings(force_sheet_sync=False)
+initial_standings = fetch_standings_from_sheet()
 
 state: Dict[str, Any] = {
     "match": {
@@ -284,7 +225,7 @@ async def next_match(winner: str = "p1"):
 
 @app.get("/api/standings")
 async def get_standings():
-    all_s = get_all_standings()
+    all_s = fetch_standings_from_sheet()
     return {
         "daily": all_s["daily"],
         "weekly": all_s["weekly"],
@@ -334,63 +275,46 @@ async def add_win(req: Request):
     if not tag or tag in ["Player 1", "Player 2"]:
         return {"status": "ignored"}
 
-    all_s = get_all_standings()
+    all_s = fetch_standings_from_sheet()
 
-    daily_list, _ = update_wins_in_list(all_s["daily"], tag, amount, auto_add)
-    weekly_list, _ = update_wins_in_list(all_s["weekly"], tag, amount, auto_add)
-    monthly_list, _ = update_wins_in_list(all_s["monthly"], tag, amount, auto_add)
-    master_list, p_master = update_wins_in_list(all_s["master"], tag, amount, auto_add)
-
-    save_json_file(DAILY_FILE, daily_list)
-    save_json_file(WEEKLY_FILE, weekly_list)
-    save_json_file(MONTHLY_FILE, monthly_list)
-    save_json_file(MASTER_FILE, master_list)
-
-    state["standings_daily"] = daily_list
-    state["standings_weekly"] = weekly_list
-    state["standings_monthly"] = monthly_list
-    state["standings_master"] = master_list
-    state["standings"] = master_list
+    for tier_name, list_ref in [("daily", all_s["daily"]), ("weekly", all_s["weekly"]), ("monthly", all_s["monthly"]), ("master", all_s["master"])]:
+        updated_list, p_obj = update_wins_in_list(list_ref, tag, amount, auto_add)
+        if p_obj:
+            sync_to_google_sheet({
+                "action": "update",
+                "tier": tier_name,
+                "tag": p_obj["tag"],
+                "platform": p_obj["platform"],
+                "wins": p_obj["wins"],
+                "rank": p_obj["rank"]
+            })
 
     deleted_tags = load_deleted_tags()
     if tag.lower() in deleted_tags:
         deleted_tags.remove(tag.lower())
         save_deleted_tags(deleted_tags)
 
-    if p_master:
-        sync_to_google_sheet({
-            "action": "update",
-            "tag": p_master["tag"],
-            "platform": p_master["platform"],
-            "wins": p_master["wins"],
-            "rank": p_master["rank"]
-        })
+    fresh_s = fetch_standings_from_sheet()
+    state["standings_daily"] = fresh_s["daily"]
+    state["standings_weekly"] = fresh_s["weekly"]
+    state["standings_monthly"] = fresh_s["monthly"]
+    state["standings_master"] = fresh_s["master"]
+    state["standings"] = fresh_s["master"]
 
-    payload_full = {
-        "daily": daily_list,
-        "weekly": weekly_list,
-        "monthly": monthly_list,
-        "master": master_list
-    }
-    await manager.broadcast("STANDINGS_UPDATE", payload_full)
+    await manager.broadcast("STANDINGS_UPDATE", fresh_s)
     await manager.broadcast("FULL_STATE", state)
-    return {"status": "success", "standings": payload_full}
+    return {"status": "success", "standings": fresh_s}
 
 @app.post("/api/win/undo")
 async def undo_win(req: Request):
     data = await req.json()
     target_tag = data.get("tag", "").strip()
-    p1 = data.get("p1", "").strip()
-    p2 = data.get("p2", "").strip()
-
+    
     tags_to_undo = []
     if target_tag:
         tags_to_undo.append(target_tag.lower())
-    else:
-        if p1 and p1 not in ["Player 1", "Player 2"]: tags_to_undo.append(p1.lower())
-        if p2 and p2 not in ["Player 2", "Player 1"]: tags_to_undo.append(p2.lower())
 
-    all_s = get_all_standings()
+    all_s = fetch_standings_from_sheet()
 
     def undo_in_list(list_data):
         updated = []
@@ -408,40 +332,28 @@ async def undo_win(req: Request):
                 updated.append(p)
         return list_data, updated
 
-    daily_list, _ = undo_in_list(all_s["daily"])
-    weekly_list, _ = undo_in_list(all_s["weekly"])
-    monthly_list, _ = undo_in_list(all_s["monthly"])
-    master_list, u_master = undo_in_list(all_s["master"])
+    for tier_name, list_ref in [("daily", all_s["daily"]), ("weekly", all_s["weekly"]), ("monthly", all_s["monthly"]), ("master", all_s["master"])]:
+        _, u_list = undo_in_list(list_ref)
+        for p in u_list:
+            sync_to_google_sheet({
+                "action": "update",
+                "tier": tier_name,
+                "tag": p["tag"],
+                "platform": p["platform"],
+                "wins": p["wins"],
+                "rank": p["rank"]
+            })
 
-    save_json_file(DAILY_FILE, daily_list)
-    save_json_file(WEEKLY_FILE, weekly_list)
-    save_json_file(MONTHLY_FILE, monthly_list)
-    save_json_file(MASTER_FILE, master_list)
+    fresh_s = fetch_standings_from_sheet()
+    state["standings_daily"] = fresh_s["daily"]
+    state["standings_weekly"] = fresh_s["weekly"]
+    state["standings_monthly"] = fresh_s["monthly"]
+    state["standings_master"] = fresh_s["master"]
+    state["standings"] = fresh_s["master"]
 
-    state["standings_daily"] = daily_list
-    state["standings_weekly"] = weekly_list
-    state["standings_monthly"] = monthly_list
-    state["standings_master"] = master_list
-    state["standings"] = master_list
-
-    for p in u_master:
-        sync_to_google_sheet({
-            "action": "update",
-            "tag": p["tag"],
-            "platform": p["platform"],
-            "wins": p["wins"],
-            "rank": p["rank"]
-        })
-
-    payload_full = {
-        "daily": daily_list,
-        "weekly": weekly_list,
-        "monthly": monthly_list,
-        "master": master_list
-    }
-    await manager.broadcast("STANDINGS_UPDATE", payload_full)
+    await manager.broadcast("STANDINGS_UPDATE", fresh_s)
     await manager.broadcast("FULL_STATE", state)
-    return {"status": "success", "standings": payload_full}
+    return {"status": "success", "standings": fresh_s}
 
 @app.post("/api/standings/edit")
 async def edit_player_tag(req: Request):
@@ -461,7 +373,7 @@ async def edit_player_tag(req: Request):
         deleted_tags.add(old_tag.lower())
         save_deleted_tags(deleted_tags)
 
-    all_s = get_all_standings()
+    all_s = fetch_standings_from_sheet()
 
     def edit_in_list(list_data):
         target = None
@@ -474,42 +386,30 @@ async def edit_player_tag(req: Request):
                 break
         return list_data, target
 
-    daily_list, _ = edit_in_list(all_s["daily"])
-    weekly_list, _ = edit_in_list(all_s["weekly"])
-    monthly_list, _ = edit_in_list(all_s["monthly"])
-    master_list, t_master = edit_in_list(all_s["master"])
+    for tier_name, list_ref in [("daily", all_s["daily"]), ("weekly", all_s["weekly"]), ("monthly", all_s["monthly"]), ("master", all_s["master"])]:
+        _, t_obj = edit_in_list(list_ref)
+        if t_obj:
+            if new_tag.lower() != old_tag.lower():
+                sync_to_google_sheet({"action": "delete", "tier": tier_name, "tag": old_tag})
+            sync_to_google_sheet({
+                "action": "update",
+                "tier": tier_name,
+                "tag": t_obj["tag"],
+                "platform": t_obj["platform"],
+                "wins": t_obj["wins"],
+                "rank": t_obj["rank"]
+            })
 
-    save_json_file(DAILY_FILE, daily_list)
-    save_json_file(WEEKLY_FILE, weekly_list)
-    save_json_file(MONTHLY_FILE, monthly_list)
-    save_json_file(MASTER_FILE, master_list)
+    fresh_s = fetch_standings_from_sheet()
+    state["standings_daily"] = fresh_s["daily"]
+    state["standings_weekly"] = fresh_s["weekly"]
+    state["standings_monthly"] = fresh_s["monthly"]
+    state["standings_master"] = fresh_s["master"]
+    state["standings"] = fresh_s["master"]
 
-    state["standings_daily"] = daily_list
-    state["standings_weekly"] = weekly_list
-    state["standings_monthly"] = monthly_list
-    state["standings_master"] = master_list
-    state["standings"] = master_list
-
-    if t_master:
-        if new_tag.lower() != old_tag.lower():
-            sync_to_google_sheet({"action": "delete", "tag": old_tag})
-        sync_to_google_sheet({
-            "action": "update",
-            "tag": t_master["tag"],
-            "platform": t_master["platform"],
-            "wins": t_master["wins"],
-            "rank": t_master["rank"]
-        })
-
-    payload_full = {
-        "daily": daily_list,
-        "weekly": weekly_list,
-        "monthly": monthly_list,
-        "master": master_list
-    }
-    await manager.broadcast("STANDINGS_UPDATE", payload_full)
+    await manager.broadcast("STANDINGS_UPDATE", fresh_s)
     await manager.broadcast("FULL_STATE", state)
-    return {"status": "success", "standings": payload_full}
+    return {"status": "success", "standings": fresh_s}
 
 @app.post("/api/standings/delete")
 async def delete_player_tag(req: Request):
@@ -523,35 +423,19 @@ async def delete_player_tag(req: Request):
     deleted_tags.add(tag.lower())
     save_deleted_tags(deleted_tags)
 
-    all_s = get_all_standings()
+    for tier_name in ["daily", "weekly", "monthly", "master"]:
+        sync_to_google_sheet({"action": "delete", "tier": tier_name, "tag": tag})
 
-    daily_list = [p for p in all_s["daily"] if p["tag"].lower() != tag.lower()]
-    weekly_list = [p for p in all_s["weekly"] if p["tag"].lower() != tag.lower()]
-    monthly_list = [p for p in all_s["monthly"] if p["tag"].lower() != tag.lower()]
-    master_list = [p for p in all_s["master"] if p["tag"].lower() != tag.lower()]
+    fresh_s = fetch_standings_from_sheet()
+    state["standings_daily"] = fresh_s["daily"]
+    state["standings_weekly"] = fresh_s["weekly"]
+    state["standings_monthly"] = fresh_s["monthly"]
+    state["standings_master"] = fresh_s["master"]
+    state["standings"] = fresh_s["master"]
 
-    save_json_file(DAILY_FILE, daily_list)
-    save_json_file(WEEKLY_FILE, weekly_list)
-    save_json_file(MONTHLY_FILE, monthly_list)
-    save_json_file(MASTER_FILE, master_list)
-
-    state["standings_daily"] = daily_list
-    state["standings_weekly"] = weekly_list
-    state["standings_monthly"] = monthly_list
-    state["standings_master"] = master_list
-    state["standings"] = master_list
-
-    sync_to_google_sheet({"action": "delete", "tag": tag})
-
-    payload_full = {
-        "daily": daily_list,
-        "weekly": weekly_list,
-        "monthly": monthly_list,
-        "master": master_list
-    }
-    await manager.broadcast("STANDINGS_UPDATE", payload_full)
+    await manager.broadcast("STANDINGS_UPDATE", fresh_s)
     await manager.broadcast("FULL_STATE", state)
-    return {"status": "success", "standings": payload_full}
+    return {"status": "success", "standings": fresh_s}
 
 @app.post("/api/standings/reset")
 async def reset_standings(req: Request = None):
@@ -563,68 +447,22 @@ async def reset_standings(req: Request = None):
     except Exception:
         pass
 
-    all_s = get_all_standings()
-
-    def zero_out_list(list_data, is_master=False):
-        for player in list_data:
-            player["wins"] = "0"
-            player["points"] = "0"
-            player["rank"] = "-"
-            if is_master:
-                sync_to_google_sheet({
-                    "action": "update",
-                    "tag": player["tag"],
-                    "platform": player["platform"],
-                    "wins": "0",
-                    "rank": "-"
-                })
-        return list_data
-
     if scope == "all":
-        all_s["daily"] = zero_out_list(all_s["daily"])
-        all_s["weekly"] = zero_out_list(all_s["weekly"])
-        all_s["monthly"] = zero_out_list(all_s["monthly"])
-        all_s["master"] = zero_out_list(all_s["master"], is_master=True)
-        
-        save_json_file(DAILY_FILE, all_s["daily"])
-        save_json_file(WEEKLY_FILE, all_s["weekly"])
-        save_json_file(MONTHLY_FILE, all_s["monthly"])
-        save_json_file(MASTER_FILE, all_s["master"])
+        for tier_name in ["daily", "weekly", "monthly", "master"]:
+            sync_to_google_sheet({"action": "reset", "tier": tier_name})
     else:
-        if scope == "daily":
-            target_list = all_s["daily"]
-            filepath = DAILY_FILE
-            state_key = "standings_daily"
-            is_m = False
-        elif scope == "weekly":
-            target_list = all_s["weekly"]
-            filepath = WEEKLY_FILE
-            state_key = "standings_weekly"
-            is_m = False
-        elif scope == "monthly":
-            target_list = all_s["monthly"]
-            filepath = MONTHLY_FILE
-            state_key = "standings_monthly"
-            is_m = False
-        else:
-            target_list = all_s["master"]
-            filepath = MASTER_FILE
-            state_key = "standings_master"
-            is_m = True
+        sync_to_google_sheet({"action": "reset", "tier": scope})
 
-        zero_out_list(target_list, is_master=is_m)
-        save_json_file(filepath, target_list)
-        state[state_key] = target_list
+    fresh_s = fetch_standings_from_sheet()
+    state["standings_daily"] = fresh_s["daily"]
+    state["standings_weekly"] = fresh_s["weekly"]
+    state["standings_monthly"] = fresh_s["monthly"]
+    state["standings_master"] = fresh_s["master"]
+    state["standings"] = fresh_s["master"]
 
-    payload_full = {
-        "daily": all_s["daily"],
-        "weekly": all_s["weekly"],
-        "monthly": all_s["monthly"],
-        "master": all_s["master"]
-    }
-    await manager.broadcast("STANDINGS_UPDATE", payload_full)
+    await manager.broadcast("STANDINGS_UPDATE", fresh_s)
     await manager.broadcast("FULL_STATE", state)
-    return {"status": "success", "scope": scope, "standings": payload_full}
+    return {"status": "success", "scope": scope, "standings": fresh_s}
 
 @app.get("/api/banner")
 async def get_banner():
