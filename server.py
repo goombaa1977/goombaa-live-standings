@@ -2,7 +2,7 @@
 Goombaa Control Center - Backend Web Server
 File: server.py
 Description: Full FastAPI backend with centralized backend KOTH slot rotation for both Player 1 and Player 2,
-precise multi-tier win cascading, and sequential non-blocking Google Sheets background sync.
+cascading multi-tier win accumulation, and instant non-blocking Google Sheets background sync.
 """
 
 import os
@@ -331,36 +331,37 @@ async def add_win(req: Request):
     if not tag or tag in ["Player 1", "Player 2"]:
         return {"status": "ignored"}
 
-    # 1. Update ALL tiers locally (Daily, Weekly, Monthly, Master) instantly
-    updated_p_master = None
-    
-    state["standings_daily"], _ = update_wins_in_list(state["standings_daily"], tag, amount)
+    # 1. Independently increment and cascade the win across ALL four local tiers
+    state["standings_daily"], updated_p_daily = update_wins_in_list(state["standings_daily"], tag, amount)
     save_json_file(DAILY_FILE, state["standings_daily"])
 
-    state["standings_weekly"], _ = update_wins_in_list(state["standings_weekly"], tag, amount)
+    state["standings_weekly"], updated_p_weekly = update_wins_in_list(state["standings_weekly"], tag, amount)
     save_json_file(WEEKLY_FILE, state["standings_weekly"])
 
-    state["standings_monthly"], _ = update_wins_in_list(state["standings_monthly"], tag, amount)
+    state["standings_monthly"], updated_p_monthly = update_wins_in_list(state["standings_monthly"], tag, amount)
     save_json_file(MONTHLY_FILE, state["standings_monthly"])
 
     state["standings_master"], updated_p_master = update_wins_in_list(state["standings_master"], tag, amount)
     state["standings"] = state["standings_master"]
     save_json_file(MASTER_FILE, state["standings_master"])
 
-    # 2. Push updates sequentially to Google Sheets in the background with tiny spacing so requests don't collide
+    # 2. Push each tier's independent accumulated total to Google Sheets sequentially in the background
     async def background_sync_sheets():
-        for tier_key in ["daily", "weekly", "monthly", "master"]:
-            tier_list = state.get(f"standings_{tier_key}", state["standings_master"])
-            p_obj = next((p for p in tier_list if p["tag"].lower() == tag.lower()), updated_p_master)
-            
+        tiers_data = [
+            ("daily", updated_p_daily),
+            ("weekly", updated_p_weekly),
+            ("monthly", updated_p_monthly),
+            ("master", updated_p_master)
+        ]
+        for tier_key, p_obj in tiers_data:
             await asyncio.to_thread(post_to_google_sheets, {
                 "action": "update",
                 "tier": tier_key,
                 "tag": tag,
                 "platform": p_obj.get("platform", "Twitch"),
-                "wins": int(p_obj.get("wins", 0))
+                "wins": int(p_obj.get("wins", amount))
             })
-            await asyncio.sleep(0.4) # Brief pause between requests to prevent Google Sheets drops
+            await asyncio.sleep(0.4)
 
     asyncio.create_task(background_sync_sheets())
 
