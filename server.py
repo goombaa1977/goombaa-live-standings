@@ -2,7 +2,7 @@
 Goombaa Control Center - Backend Web Server
 File: server.py
 Description: Full FastAPI backend with centralized backend KOTH slot rotation for both Player 1 and Player 2,
-precise win tallying across all tiers simultaneously, and non-blocking Google Sheets sync.
+precise win tallying across all tiers simultaneously, and instant non-blocking Google Sheets background sync.
 """
 
 import os
@@ -331,7 +331,7 @@ async def add_win(req: Request):
     if not tag or tag in ["Player 1", "Player 2"]:
         return {"status": "ignored"}
 
-    # Update ALL tiers locally (Daily, Weekly, Monthly, Master) simultaneously
+    # 1. Update ALL tiers locally (Daily, Weekly, Monthly, Master) instantly
     updated_p_master = None
     
     state["standings_daily"], _ = update_wins_in_list(state["standings_daily"], tag, amount)
@@ -347,18 +347,21 @@ async def add_win(req: Request):
     state["standings"] = state["standings_master"]
     save_json_file(MASTER_FILE, state["standings_master"])
 
-    # Push updates to Google Sheets for ALL four tiers so they stay completely in sync
-    for tier_key in ["daily", "weekly", "monthly", "master"]:
-        tier_list = state.get(f"standings_{tier_key}", state["standings_master"])
-        p_obj = next((p for p in tier_list if p["tag"].lower() == tag.lower()), updated_p_master)
-        
-        post_to_google_sheets({
-            "action": "update",
-            "tier": tier_key,
-            "tag": tag,
-            "platform": p_obj.get("platform", "Twitch"),
-            "wins": int(p_obj.get("wins", 0))
-        })
+    # 2. Push updates to Google Sheets asynchronously in the background (removes the delay)
+    async def background_sync_sheets():
+        for tier_key in ["daily", "weekly", "monthly", "master"]:
+            tier_list = state.get(f"standings_{tier_key}", state["standings_master"])
+            p_obj = next((p for p in tier_list if p["tag"].lower() == tag.lower()), updated_p_master)
+            
+            await asyncio.to_thread(post_to_google_sheets, {
+                "action": "update",
+                "tier": tier_key,
+                "tag": tag,
+                "platform": p_obj.get("platform", "Twitch"),
+                "wins": int(p_obj.get("wins", 0))
+            })
+
+    asyncio.create_task(background_sync_sheets())
 
     # --- PROTECTED KOTH ROTATION LOGIC (DO NOT ALTER) ---
     p1_current = str(state["match"].get("p1") or state["match"].get("player1") or "").strip()
