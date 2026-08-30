@@ -1,8 +1,8 @@
 """
 Goombaa Control Center - Backend Web Server
 File: server.py
-Description: Full FastAPI backend with clean win recording, non-blocking Google Sheets sync,
-and full two-way communication (leaving queue/KOTH management entirely to frontend scripts).
+Description: Full FastAPI backend with fixed Player 2 KOTH queue rotation, non-blocking Google Sheets sync,
+and full two-way communication.
 """
 
 import os
@@ -227,26 +227,37 @@ async def next_match(req: Request = None):
     except Exception:
         pass
 
-    if len(state["queue"]) > 0:
-        next_player = state["queue"].pop(0)
-        p1_current = state["match"].get("p1") or state["match"].get("player1")
-        p2_current = state["match"].get("p2") or state["match"].get("player2")
+    p1_current = state["match"].get("p1") or state["match"].get("player1")
+    p2_current = state["match"].get("p2") or state["match"].get("player2")
 
-        if winner == "p2" or winner == "player2":
-            current_loser = p1_current
-            state["match"]["p1"] = p2_current
-            state["match"]["player1"] = p2_current
+    if winner == "p2" or winner == "player2":
+        # Player 2 wins: P2 becomes champion (P1), P1 goes to back of queue
+        current_loser = p1_current
+        state["match"]["p1"] = p2_current
+        state["match"]["player1"] = p2_current
+        
+        if len(state["queue"]) > 0:
+            next_player = state["queue"].pop(0)
             state["match"]["p2"] = next_player
             state["match"]["player2"] = next_player
         else:
-            current_loser = p2_current
+            state["match"]["p2"] = "Player 2"
+            state["match"]["player2"] = "Player 2"
+    else:
+        # Player 1 wins: P1 stays champion, P2 goes to back of queue
+        current_loser = p2_current
+        if len(state["queue"]) > 0:
+            next_player = state["queue"].pop(0)
             state["match"]["p2"] = next_player
             state["match"]["player2"] = next_player
+        else:
+            state["match"]["p2"] = "Player 2"
+            state["match"]["player2"] = "Player 2"
 
-        if current_loser and current_loser not in ["Player 1", "Player 2"] and current_loser not in state["queue"]:
-            state["queue"].append(current_loser)
+    if current_loser and current_loser not in ["Player 1", "Player 2", ""] and current_loser not in state["queue"]:
+        state["queue"].append(current_loser)
 
-        save_json_file(QUEUE_FILE, state["queue"])
+    save_json_file(QUEUE_FILE, state["queue"])
 
     await manager.broadcast("MATCH_UPDATE", state["match"])
     await manager.broadcast("QUEUE_UPDATE", state["queue"])
@@ -649,7 +660,6 @@ async def serve_charity_overlay():
 
 @app.get("/overlay_horizontal.html")
 async def serve_horizontal_overlay():
-    file_path = os.path.join(SCRIPT_DIR, "overlay_horizontal.html")
     file_path = os.path.join(SCRIPT_DIR, "overlay_horizontal.html")
     if os.path.exists(file_path):
         return FileResponse(file_path)
