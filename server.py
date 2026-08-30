@@ -1,7 +1,7 @@
 """
 Goombaa Control Center - Backend Web Server
 File: server.py
-Description: Full FastAPI backend with centralized backend KOTH slot rotation for Player 2,
+Description: Full FastAPI backend with centralized KOTH slot rotation for both Player 1 and Player 2,
 non-blocking Google Sheets sync, and full two-way communication.
 """
 
@@ -356,15 +356,32 @@ async def add_win(req: Request):
         "wins": int(updated_p.get("wins", 0))
     })
 
-    # Backend KOTH Sync for Player 2 Win: Check if the winning tag matches who is sitting in Player 2
+    # Robust Backend KOTH Rotation: Handle both Player 1 and Player 2 wins cleanly on the server
     p1_current = str(state["match"].get("p1") or state["match"].get("player1") or "").strip()
     p2_current = str(state["match"].get("p2") or state["match"].get("player2") or "").strip()
 
     if tag.lower() == p2_current.lower():
-        # Player 2 won: Promote P2 to P1, send old P1 to queue, pull next challenger into P2
+        # Player 2 wins: P2 moves up to P1, old P1 goes to the queue, next queue player takes P2
         loser = p1_current
         state["match"]["p1"] = p2_current
         state["match"]["player1"] = p2_current
+        
+        if len(state["queue"]) > 0:
+            next_challenger = state["queue"].pop(0)
+            state["match"]["p2"] = next_challenger
+            state["match"]["player2"] = next_challenger
+        else:
+            state["match"]["p2"] = "Player 2"
+            state["match"]["player2"] = "Player 2"
+
+        if loser and loser not in ["Player 1", "Player 2", ""] and loser not in state["queue"]:
+            state["queue"].append(loser)
+            
+        save_json_file(QUEUE_FILE, state["queue"])
+
+    elif tag.lower() == p1_current.lower():
+        # Player 1 wins: P1 stays, old P2 goes to the queue, next queue player takes P2
+        loser = p2_current
         
         if len(state["queue"]) > 0:
             next_challenger = state["queue"].pop(0)
