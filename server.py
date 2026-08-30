@@ -332,7 +332,6 @@ async def add_win(req: Request):
     if not tag or tag in ["Player 1", "Player 2"]:
         return {"status": "ignored"}
 
-    # Update correct tier list in local memory & save json cache
     if tier_target == "daily":
         state["standings_daily"], updated_p = update_wins_in_list(state["standings_daily"], tag, amount)
         save_json_file(DAILY_FILE, state["standings_daily"])
@@ -348,7 +347,6 @@ async def add_win(req: Request):
         state["standings"] = state["standings_master"]
         save_json_file(MASTER_FILE, state["standings_master"])
 
-    # Push update to Google Sheets Web App for the specific tier
     post_to_google_sheets({
         "action": "update",
         "tier": tier_target,
@@ -357,7 +355,6 @@ async def add_win(req: Request):
         "wins": int(updated_p.get("wins", 0))
     })
 
-    # Fixed KOTH / Queue Rotation Logic
     if len(state["queue"]) > 0:
         p1_current = str(state["match"].get("p1") or state["match"].get("player1") or "").strip()
         p2_current = str(state["match"].get("p2") or state["match"].get("player2") or "").strip()
@@ -711,7 +708,7 @@ async def serve_dock_broadcast():
         return FileResponse(file_path)
     return {"error": "dock_broadcast.html file not found"}
 
-@app.mount("/", StaticFiles(directory=SCRIPT_DIR, html=True), name="static")
+app.mount("/", StaticFiles(directory=SCRIPT_DIR, html=True), name="static")
 
 if __name__ == "__main__":
     print("[Goombaa Control Center] Running on http://0.0.0.0:8000")
