@@ -1,8 +1,8 @@
 """
 Goombaa Control Center - Backend Web Server
 File: server.py
-Description: Full FastAPI backend with clean win recording, non-blocking Google Sheets sync,
-and full two-way communication (letting frontend handle KOTH match/queue rotation seamlessly).
+Description: Full FastAPI backend with robust KOTH slot promotion for Player 2, 
+tier-specific win tracking, non-blocking Google Sheets sync, and full two-way communication.
 """
 
 import os
@@ -356,6 +356,28 @@ async def add_win(req: Request):
         "wins": int(updated_p.get("wins", 0))
     })
 
+    # Intelligent KOTH Backend Sync: If Player 2 wins, promote them to P1 and rotate queue cleanly
+    p1_current = str(state["match"].get("p1") or state["match"].get("player1") or "").strip()
+    p2_current = str(state["match"].get("p2") or state["match"].get("player2") or "").strip()
+
+    if tag.lower() == p2_current.lower():
+        loser = p1_current
+        state["match"]["p1"] = p2_current
+        state["match"]["player1"] = p2_current
+        
+        if len(state["queue"]) > 0:
+            next_challenger = state["queue"].pop(0)
+            state["match"]["p2"] = next_challenger
+            state["match"]["player2"] = next_challenger
+        else:
+            state["match"]["p2"] = "Player 2"
+            state["match"]["player2"] = "Player 2"
+
+        if loser and loser not in ["Player 1", "Player 2", ""] and loser not in state["queue"]:
+            state["queue"].append(loser)
+            
+        save_json_file(QUEUE_FILE, state["queue"])
+
     payload_full = {
         "daily": state["standings_daily"],
         "weekly": state["standings_weekly"],
@@ -363,8 +385,10 @@ async def add_win(req: Request):
         "master": state["standings_master"]
     }
     await manager.broadcast("STANDINGS_UPDATE", payload_full)
+    await manager.broadcast("MATCH_UPDATE", state["match"])
+    await manager.broadcast("QUEUE_UPDATE", state["queue"])
     await manager.broadcast("FULL_STATE", state)
-    return {"status": "success", "standings": payload_full}
+    return {"status": "success", "standings": payload_full, "match": state["match"], "queue": state["queue"]}
 
 @app.post("/api/win/undo")
 async def undo_win(req: Request):
