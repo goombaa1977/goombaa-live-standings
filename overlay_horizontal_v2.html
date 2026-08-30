@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GCC Horizontal Broadcast Overlay</title>
+<style>
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: 'Segoe UI', Arial, sans-serif;
+    }
+
+    body {
+        width: 100%;
+        height: 100vh;
+        background: transparent;
+        overflow: hidden;
+        color: #ffffff;
+    }
+
+    .horizontal-container {
+        display: flex;
+        flex-direction: row;
+        align-items: stretch;
+        justify-content: space-between;
+        width: 100%;
+        height: 100vh;
+        background: rgba(12, 16, 22, 0.96);
+        padding: 6px;
+        gap: 8px;
+        box-sizing: border-box;
+    }
+
+    .card {
+        background: #161c28;
+        border-radius: 8px;
+        padding: 6px 8px;
+        border: 1.5px solid #232d42;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        box-sizing: border-box;
+        height: 100%;
+    }
+
+    .card-match { flex: 1.15; }
+    .card-banner-wrap { flex: 0.95; display: flex; }
+    .card-queue { flex: 1.85; }
+
+    /* MATCH HEADER */
+    .card-header-title {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        font-size: 20px;
+        color: #ffd700;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        font-weight: 900;
+        margin-bottom: 2px;
+    }
+
+    /* BIGGER EMOTES (68px) */
+    .header-icon {
+        width: 68px;
+        height: 68px;
+        object-fit: contain;
+        flex-shrink: 0;
+        filter: drop-shadow(0 3px 6px rgba(0,0,0,0.9));
+    }
+
+    /* "FIGHTING NOW" BADGE */
+    .match-round {
+        font-size: 17px;
+        font-weight: 900;
+        color: #00e676;
+        margin-bottom: 4px;
+        text-align: center;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        background: rgba(0, 230, 118, 0.2);
+        padding: 5px 4px;
+        border-radius: 4px;
+        border: 1.5px solid rgba(0, 230, 118, 0.4);
+        width: 100%;
+        box-shadow: inset 0 0 6px rgba(0, 230, 118, 0.2);
+    }
+
+    /* BIGGER, ULTRA-READABLE ACTIVE MATCH PLAYER ROWS */
+    .player-row {
+        display: flex;
+        align-items: center;
+        background: #20293a;
+        padding: 6px 10px;
+        border-radius: 4px;
+        margin-bottom: 4px;
+        border-left: 5px solid #00e676;
+    }
+
+    .player-name {
+        font-size: 24px;
+        font-weight: 900;
+        color: #ffffff;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        width: 100%;
+        text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
+    }
+
+    /* QUEUE HEADER */
+    .queue-header {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        font-size: 22px;
+        color: #ffd700;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        font-weight: 900;
+        margin-bottom: 2px;
+    }
+
+    /* TWO-COLUMN GRID FOR QUEUE */
+    .queue-list {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: repeat(3, auto);
+        grid-auto-flow: column;
+        gap: 4px 6px;
+        flex: 1;
+    }
+
+    .queue-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: #20293a;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 22px;
+        font-weight: 900;
+        color: #ffffff;
+        border-left: 4px solid #ff9900;
+    }
+
+    .queue-item .player-name {
+        font-size: 22px;
+    }
+
+    .queue-badge {
+        color: #0d1117;
+        background: #ff9900;
+        font-size: 17px;
+        font-weight: 900;
+        padding: 1px 6px;
+        border-radius: 3px;
+        text-align: center;
+        min-width: 26px;
+        border: 1px solid #ffffff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+    }
+
+    /* BROADCAST ALERT BOX */
+    .alert-box {
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #ff8c00, #ff4500);
+        color: #ffffff;
+        padding: 8px 6px;
+        border-radius: 6px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        border: 2px solid #111111;
+        box-shadow: 0 0 12px rgba(255, 140, 0, 0.6);
+    }
+
+    .alert-header {
+        font-size: 22px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        margin-bottom: 4px;
+        color: #ffffff;
+        text-shadow: 2px 2px 4px #000000, -1px -1px 0 #8b0000;
+    }
+
+    .alert-body {
+        font-size: 26px;
+        font-weight: 900;
+        line-height: 1.15;
+        color: #ffffff;
+        text-shadow: 2px 2px 6px #000000, 0px 0px 4px #000000;
+        white-space: normal;
+        word-break: break-word;
+        max-width: 100%;
+    }
+</style>
+</head>
+<body>
+
+<div class="horizontal-container">
+    <!-- ACTIVE MATCH CARD -->
+    <div class="card card-match">
+        <div class="card-header-title">
+            <img src="Blasted Iso.png" onerror="this.onerror=null; this.src='Blasted Iso.jpg';" class="header-icon" alt="Goombaa Logo">
+            <span>ACTIVE MATCH</span>
+        </div>
+        <div id="matchRound" class="match-round">FIGHTING NOW</div>
+        <div class="player-row">
+            <span id="p1Name" class="player-name">Player 1</span>
+        </div>
+        <div class="player-row">
+            <span id="p2Name" class="player-name">Player 2</span>
+        </div>
+    </div>
+
+    <!-- CLEAN BROADCAST ALERT CARD -->
+    <div class="card card-banner-wrap">
+        <div id="alertBox" class="alert-box">
+            <div id="alertHeader" class="alert-header">NEXT HOUR</div>
+            <div id="alertBody" class="alert-body">Goombaa Glossary</div>
+        </div>
+    </div>
+
+    <!-- EXPANDED G QUEUE CARD -->
+    <div class="card card-queue">
+        <div class="queue-header">
+            <img src="Snooze.jpg" onerror="this.onerror=null; this.src='Snooze.png';" class="header-icon" alt="Snooze Emote">
+            <span>G QUEUE</span>
+        </div>
+        <div id="queueList" class="queue-list">
+            <div class="queue-item">
+                <span>Waiting for queue...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API_BASE = window.location.origin.includes("http") ? `${window.location.origin}/api` : "http://127.0.0.1:8000/api";
+
+    function renderMatch(matchData) {
+        if (!matchData) return;
+        document.getElementById("matchRound").innerText = matchData.round || matchData.round_label || "FIGHTING NOW";
+        document.getElementById("p1Name").innerText = matchData.p1 || matchData.player1 || (matchData.player1?.name) || "Player 1";
+        document.getElementById("p2Name").innerText = matchData.p2 || matchData.player2 || (matchData.player2?.name) || "Player 2";
+    }
+
+    function renderQueue(queueData) {
+        const queueContainer = document.getElementById("queueList");
+        queueContainer.innerHTML = "";
+        if (!queueData || queueData.length === 0) {
+            queueContainer.innerHTML = `
+                <div class="queue-item" style="grid-column: span 2;">
+                    <span>Waiting for queue...</span>
+                </div>`;
+        } else {
+            queueData.slice(0, 6).forEach((player, idx) => {
+                const playerName = typeof player === 'object' ? player.name : player;
+                const item = document.createElement("div");
+                item.className = "queue-item";
+                item.innerHTML = `
+                    <span class="player-name">${playerName}</span>
+                    <span class="queue-badge">${idx + 1}</span>`;
+                queueContainer.appendChild(item);
+            });
+        }
+    }
+
+    function renderBanner(bannerData) {
+        if (!bannerData) return;
+        const alertHeader = document.getElementById("alertHeader");
+        const alertBody = document.getElementById("alertBody");
+        alertHeader.innerText = bannerData.header || bannerData.text || "NEXT HOUR";
+        alertBody.innerText = bannerData.message || bannerData.subtext || bannerData.body || "Goombaa Glossary";
+    }
+
+    async function fetchAllData() {
+        try {
+            const matchRes = await fetch(`${API_BASE}/match`);
+            renderMatch(await matchRes.json());
+
+            const queueRes = await fetch(`${API_BASE}/queue`);
+            renderQueue(await queueRes.json());
+
+            const bannerRes = await fetch(`${API_BASE}/banner`);
+            renderBanner(await bannerRes.json());
+        } catch (e) {}
+    }
+
+    // --- REAL-TIME WEBSOCKET SYNC FOR INSTANT UPDATES ---
+    function initWebSocket() {
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsHost = window.location.host || '127.0.0.1:8000';
+        const ws = new WebSocket(`${wsProtocol}//${wsHost}/ws`);
+
+        ws.onmessage = function(event) {
+            try {
+                const message = JSON.parse(event.data);
+                if (message.type === 'FULL_STATE' && message.data) {
+                    renderMatch(message.data.match);
+                    renderQueue(message.data.queue);
+                    renderBanner(message.data.banner);
+                } else if (message.type === 'MATCH_UPDATE') {
+                    renderMatch(message.data);
+                } else if (message.type === 'QUEUE_UPDATE') {
+                    renderQueue(message.data);
+                } else if (message.type === 'BANNER_UPDATE') {
+                    renderBanner(message.data);
+                }
+            } catch (err) {}
+        };
+
+        ws.onclose = function() {
+            setTimeout(initWebSocket, 3000);
+        };
+    }
+
+    fetchAllData();
+    initWebSocket();
+</script>
+</body>
+</html>
