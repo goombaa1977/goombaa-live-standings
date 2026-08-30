@@ -2,7 +2,7 @@
 Goombaa Control Center - Backend Web Server
 File: server.py
 Description: Full FastAPI backend with centralized backend KOTH slot rotation for both Player 1 and Player 2,
-cascading multi-tier win accumulation, and instant non-blocking Google Sheets background sync.
+independent multi-tier win cascading, and synchronized non-blocking Google Sheets background sync.
 """
 
 import os
