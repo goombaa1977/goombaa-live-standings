@@ -548,60 +548,41 @@
             await syncQueue();
         }
 
-        /* Combined +1 Win & King of the Hill Queue Advancement */
+        /* Combined +1 Win & Server-Driven King of the Hill Queue Advancement */
         async function handleWinAndAdvance(winnerSlot) {
             const p1Tag = p1Input.value.trim();
             const p2Tag = p2Input.value.trim();
             
             const winnerTag = winnerSlot === 'p1' ? p1Tag : p2Tag;
-            const loserTag = winnerSlot === 'p1' ? p2Tag : p1Tag;
 
             if (!winnerTag || winnerTag === "Player 1" || winnerTag === "Player 2") return;
 
-            // 1. Record win on backend
+            // 1. Record win on backend and auto-push loser to queue
             await fetch(`${API_BASE}/win`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ tag: winnerTag, amount: 1, auto_add: true })
             });
 
-            // 2. Fetch fresh queue to prevent local stale array desyncs
-            try {
-                const queueRes = await fetch(`${API_BASE}/queue`);
-                const freshQueue = await queueRes.json();
-                if (Array.isArray(freshQueue)) {
-                    localQueue = freshQueue;
-                }
-            } catch (e) {}
+            // 2. Let the backend cleanly handle pulling the next challenger and pushing the loser
+            const nextRes = await fetch(`${API_BASE}/queue/next_match?winner=${winnerSlot}`, {
+                method: 'POST'
+            });
+            const nextData = await nextRes.json();
 
-            // 3. Perform King of the Hill shift safely
-            if (localQueue.length > 0) {
-                const nextChallenger = localQueue.shift();
-
-                if (winnerSlot === 'p1') {
-                    p2Input.value = nextChallenger;
-                } else {
-                    p1Input.value = p2Tag;
-                    p2Input.value = nextChallenger;
-                }
-
-                if (loserTag && loserTag !== "Player 1" && loserTag !== "Player 2" && 
-                    loserTag !== p1Input.value && loserTag !== p2Input.value && 
-                    !localQueue.includes(loserTag)) {
-                    localQueue.push(loserTag);
-                }
-            } else {
-                if (winnerSlot === 'p1') {
-                    p2Input.value = loserTag;
-                } else {
-                    p1Input.value = p2Tag;
-                    p2Input.value = loserTag;
-                }
+            // 3. Update inputs and queue instantly with the server's clean state
+            if (nextData && nextData.match) {
+                document.getElementById('roundLabel').value = nextData.match.round || "FIGHTING NOW";
+                p1Input.value = nextData.match.p1 || nextData.match.player1 || "Player 1";
+                p2Input.value = nextData.match.p2 || nextData.match.player2 || "Player 2";
             }
 
-            renderQueueUI(localQueue);
-            await updateActiveMatch();
-            await syncQueue();
+            if (nextData && Array.isArray(nextData.queue)) {
+                localQueue = nextData.queue;
+                renderQueueUI(localQueue);
+            }
+
+            await syncState();
         }
 
         async function undoActiveWin() {
