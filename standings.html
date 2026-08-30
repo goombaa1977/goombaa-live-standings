@@ -69,7 +69,7 @@
             margin-top: 15px;
             margin-bottom: 5px;
             width: 100%;
-            max-width: 900px;
+            max-width: 950px;
             justify-content: center;
         }
 
@@ -96,22 +96,30 @@
             box-shadow: 0 0 15px rgba(34, 221, 34, 0.6);
         }
 
-        /* Month Selector Container (Appears when Yearly is active) */
-        .month-selector-container {
+        /* Sub-Selector Container (Appears when Yearly is active) */
+        .sub-selector-container {
             display: none;
-            gap: 8px;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
             margin-top: 8px;
             margin-bottom: 5px;
-            justify-content: center;
-            flex-wrap: wrap;
+            width: 100%;
             max-width: 1000px;
         }
 
-        .month-selector-container.visible {
+        .sub-selector-container.visible {
             display: flex;
         }
 
-        .month-btn {
+        .selector-row {
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .sub-btn {
             background-color: #0A0A0A;
             border: 1px solid #FFD700;
             color: #FFD700;
@@ -124,10 +132,21 @@
             transition: all 0.2s ease;
         }
 
-        .month-btn.active {
+        .sub-btn.active {
             background-color: #FFD700;
             color: #000000;
             box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+
+        .year-btn {
+            border-color: #22DD22;
+            color: #22DD22;
+        }
+
+        .year-btn.active {
+            background-color: #22DD22;
+            color: #000000;
+            box-shadow: 0 0 10px rgba(34, 221, 34, 0.5);
         }
 
         /* Leaderboard Table Container */
@@ -200,29 +219,38 @@
 
         <h1 class="stream-title" id="pageTitle">STREAM STANDINGS</h1>
 
-        <!-- View Navigation Tabs (5 Tabs including Yearly) -->
+        <!-- View Navigation Tabs (Master moved to the end) -->
         <div class="tab-bar">
             <button class="tab-btn active" onclick="switchTab('daily')">Daily</button>
             <button class="tab-btn" onclick="switchTab('weekly')">Weekly</button>
             <button class="tab-btn" onclick="switchTab('monthly')">Monthly</button>
-            <button class="tab-btn" onclick="switchTab('master')">Master</button>
             <button class="tab-btn" onclick="switchTab('yearly')">Yearly</button>
+            <button class="tab-btn" onclick="switchTab('master')">Master</button>
         </div>
 
-        <!-- Month Sub-Selector (Only visible on Yearly tab) -->
-        <div class="month-selector-container" id="monthSelector">
-            <button class="month-btn active" onclick="switchMonth('JAN')">Jan</button>
-            <button class="month-btn" onclick="switchMonth('FEB')">Feb</button>
-            <button class="month-btn" onclick="switchMonth('MAR')">Mar</button>
-            <button class="month-btn" onclick="switchMonth('APR')">Apr</button>
-            <button class="month-btn" onclick="switchMonth('MAY')">May</button>
-            <button class="month-btn" onclick="switchMonth('JUN')">Jun</button>
-            <button class="month-btn" onclick="switchMonth('JUL')">Jul</button>
-            <button class="month-btn" onclick="switchMonth('AUG')">Aug</button>
-            <button class="month-btn" onclick="switchMonth('SEP')">Sep</button>
-            <button class="month-btn" onclick="switchMonth('OCT')">Oct</button>
-            <button class="month-btn" onclick="switchMonth('NOV')">Nov</button>
-            <button class="month-btn" onclick="switchMonth('DEC')">Dec</button>
+        <!-- Yearly Sub-Selectors (Years + Months + All) -->
+        <div class="sub-selector-container" id="yearlySubSelector">
+            <!-- Year Selection Row -->
+            <div class="selector-row" id="yearSelectorRow">
+                <button class="sub-btn year-btn active" onclick="switchYear('2026')">2026</button>
+                <button class="sub-btn year-btn" onclick="switchYear('2027')">2027</button>
+            </div>
+            <!-- Month / All Selection Row -->
+            <div class="selector-row" id="monthSelectorRow">
+                <button class="sub-btn active" onclick="switchMonth('ALL')">ALL</button>
+                <button class="sub-btn" onclick="switchMonth('JAN')">Jan</button>
+                <button class="sub-btn" onclick="switchMonth('FEB')">Feb</button>
+                <button class="sub-btn" onclick="switchMonth('MAR')">Mar</button>
+                <button class="sub-btn" onclick="switchMonth('APR')">Apr</button>
+                <button class="sub-btn" onclick="switchMonth('MAY')">May</button>
+                <button class="sub-btn" onclick="switchMonth('JUN')">Jun</button>
+                <button class="sub-btn" onclick="switchMonth('JUL')">Jul</button>
+                <button class="sub-btn" onclick="switchMonth('AUG')">Aug</button>
+                <button class="sub-btn" onclick="switchMonth('SEP')">Sep</button>
+                <button class="sub-btn" onclick="switchMonth('OCT')">Oct</button>
+                <button class="sub-btn" onclick="switchMonth('NOV')">Nov</button>
+                <button class="sub-btn" onclick="switchMonth('DEC')">Dec</button>
+            </div>
         </div>
 
         <!-- Leaderboard Table -->
@@ -251,56 +279,77 @@
             yearly: []
         };
         let currentTab = 'daily';
-        let currentMonth = 'AUG'; // Default active month filter for yearly view
+        let currentYear = '2026';
+        let currentMonth = 'ALL';
 
         function switchTab(tabName) {
             currentTab = tabName;
             
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            const monthSelector = document.getElementById('monthSelector');
+            const subSelector = document.getElementById('yearlySubSelector');
             const titleEl = document.getElementById('pageTitle');
             const now = new Date();
 
             if (tabName === 'daily') {
                 document.querySelectorAll('.tab-btn')[0].classList.add('active');
-                monthSelector.classList.remove('visible');
+                subSelector.classList.remove('visible');
                 titleEl.innerText = "STREAM STANDINGS";
             } else if (tabName === 'weekly') {
                 document.querySelectorAll('.tab-btn')[1].classList.add('active');
-                monthSelector.classList.remove('visible');
+                subSelector.classList.remove('visible');
                 const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
                 const lastDayOfWeek = new Date(now.setDate(firstDayOfWeek.getDate() + 6));
                 const weekStr = `${firstDayOfWeek.toLocaleDateString('default', { month: 'short', day: 'numeric' })} - ${lastDayOfWeek.toLocaleDateString('default', { month: 'short', day: 'numeric' })}`.toUpperCase();
                 titleEl.innerText = `WEEKLY STANDINGS (${weekStr})`;
             } else if (tabName === 'monthly') {
                 document.querySelectorAll('.tab-btn')[2].classList.add('active');
-                monthSelector.classList.remove('visible');
+                subSelector.classList.remove('visible');
                 const monthName = now.toLocaleString('default', { month: 'long' }).toUpperCase();
                 titleEl.innerText = `${monthName} STANDINGS`;
-            } else if (tabName === 'master') {
-                document.querySelectorAll('.tab-btn')[3].classList.add('active');
-                monthSelector.classList.remove('visible');
-                titleEl.innerText = "MASTER STANDINGS";
             } else if (tabName === 'yearly') {
+                document.querySelectorAll('.tab-btn')[3].classList.add('active');
+                subSelector.classList.add('visible');
+                updateTitle();
+            } else if (tabName === 'master') {
                 document.querySelectorAll('.tab-btn')[4].classList.add('active');
-                monthSelector.classList.add('visible');
-                titleEl.innerText = `2026 YEARLY ARCHIVE (${currentMonth})`;
+                subSelector.classList.remove('visible');
+                titleEl.innerText = "MASTER STANDINGS";
             }
 
             renderRows(allData[currentTab] || []);
         }
 
-        function switchMonth(monthCode) {
-            currentMonth = monthCode;
-            document.querySelectorAll('.month-btn').forEach(btn => {
+        function switchYear(yearStr) {
+            currentYear = yearStr;
+            document.querySelectorAll('#yearSelectorRow .year-btn').forEach(btn => {
                 btn.classList.remove('active');
-                if (btn.innerText.toUpperCase().includes(monthCode)) {
+                if (btn.innerText.includes(yearStr)) {
                     btn.classList.add('active');
                 }
             });
-            document.getElementById('pageTitle').innerText = `2026 YEARLY ARCHIVE (${currentMonth})`;
-            // Future logic can filter yearly records by currentMonth if stored with month metadata
+            updateTitle();
             renderRows(allData['yearly'] || []);
+        }
+
+        function switchMonth(monthCode) {
+            currentMonth = monthCode;
+            document.querySelectorAll('#monthSelectorRow .sub-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.innerText.toUpperCase() === monthCode) {
+                    btn.classList.add('active');
+                }
+            });
+            updateTitle();
+            renderRows(allData['yearly'] || []);
+        }
+
+        function updateTitle() {
+            const titleEl = document.getElementById('pageTitle');
+            if (currentMonth === 'ALL') {
+                titleEl.innerText = `${currentYear} YEARLY ARCHIVE (ALL)`;
+            } else {
+                titleEl.innerText = `${currentYear} YEARLY ARCHIVE (${currentMonth})`;
+            }
         }
 
         function getTierInfo(winsCount) {
