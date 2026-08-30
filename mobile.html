@@ -548,41 +548,40 @@
             await syncQueue();
         }
 
-        /* Combined +1 Win & Server-Driven King of the Hill Queue Advancement */
+        /* Combined +1 Win & Local King of the Hill Queue Advancement */
         async function handleWinAndAdvance(winnerSlot) {
-            const p1Tag = p1Input.value.trim();
-            const p2Tag = p2Input.value.trim();
-            
-            const winnerTag = winnerSlot === 'p1' ? p1Tag : p2Tag;
-
+            const winnerTag = winnerSlot === 'p1' ? p1Input.value.trim() : p2Input.value.trim();
             if (!winnerTag || winnerTag === "Player 1" || winnerTag === "Player 2") return;
 
-            // 1. Record win on backend and auto-push loser to queue
+            // 1. Record win on the backend and update Google Sheets / standings
             await fetch(`${API_BASE}/win`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ tag: winnerTag, amount: 1, auto_add: true })
             });
 
-            // 2. Let the backend cleanly handle pulling the next challenger and pushing the loser
-            const nextRes = await fetch(`${API_BASE}/queue/next_match?winner=${winnerSlot}`, {
-                method: 'POST'
-            });
-            const nextData = await nextRes.json();
+            // 2. Perform local KOTH queue rotation cleanly
+            if (localQueue.length > 0) {
+                const nextChallenger = localQueue.shift();
+                let losingPlayer = "";
 
-            // 3. Update inputs and queue instantly with the server's clean state
-            if (nextData && nextData.match) {
-                document.getElementById('roundLabel').value = nextData.match.round || "FIGHTING NOW";
-                p1Input.value = nextData.match.p1 || nextData.match.player1 || "Player 1";
-                p2Input.value = nextData.match.p2 || nextData.match.player2 || "Player 2";
-            }
+                if (winnerSlot === 'p1') {
+                    losingPlayer = p2Input.value.trim();
+                    p2Input.value = nextChallenger;
+                } else {
+                    losingPlayer = p1Input.value.trim();
+                    p1Input.value = p2Input.value.trim();
+                    p2Input.value = nextChallenger;
+                }
 
-            if (nextData && Array.isArray(nextData.queue)) {
-                localQueue = nextData.queue;
+                if (losingPlayer && losingPlayer !== "Player 1" && losingPlayer !== "Player 2" && !localQueue.includes(losingPlayer)) {
+                    localQueue.push(losingPlayer);
+                }
+
                 renderQueueUI(localQueue);
+                await updateActiveMatch();
+                await syncQueue();
             }
-
-            await syncState();
         }
 
         async function undoActiveWin() {
