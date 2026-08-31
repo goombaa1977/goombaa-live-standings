@@ -14,7 +14,7 @@
             align-items: flex-start;
             min-height: 100vh;
             margin: 0;
-            padding-top: 5px;
+            padding: 10px;
             box-sizing: border-box;
         }
 
@@ -31,58 +31,60 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 20px;
+            gap: 15px;
             width: 100%;
-            margin-bottom: -15px;
+            margin-bottom: -10px;
         }
 
         .side-logo {
-            max-height: 220px;
+            max-height: 150px;
             width: auto;
             object-fit: contain;
-            filter: drop-shadow(0 0 20px rgba(255, 165, 0, 0.6));
+            filter: drop-shadow(0 0 15px rgba(255, 165, 0, 0.6));
         }
 
         .letters-img {
-            max-height: 260px;
+            max-height: 180px;
             width: auto;
             object-fit: contain;
-            filter: drop-shadow(0 0 25px rgba(34, 221, 34, 0.8));
+            filter: drop-shadow(0 0 20px rgba(34, 221, 34, 0.8));
         }
 
         /* Sub-Header: STREAM STANDINGS */
         .stream-title {
             color: #FFD700;
-            font-size: 52px;
+            font-size: 38px;
             font-weight: 900;
             text-transform: uppercase;
             text-align: center;
-            letter-spacing: 3px;
-            margin: 0;
+            letter-spacing: 2px;
+            margin: 5px 0 15px 0;
             text-shadow: 2px 2px 10px rgba(0,0,0,0.9);
         }
 
         /* Tab Bar Styles (5 Tabs) */
         .tab-bar {
             display: flex;
-            gap: 8px;
-            margin-top: 15px;
-            margin-bottom: 5px;
+            gap: 6px;
+            margin-top: 5px;
+            margin-bottom: 10px;
             width: 100%;
             max-width: 950px;
             justify-content: center;
+            flex-wrap: wrap;
         }
 
         .tab-btn {
             flex: 1;
+            min-width: 75px;
             background-color: #000000;
             border: 2px solid #22DD22;
             color: #8b949e;
-            padding: 10px 8px;
-            font-size: 16px;
+            padding: 10px 6px;
+            font-size: 14px;
             font-weight: 800;
             text-transform: uppercase;
-            border-radius: 15px;
+            border-radius: 12px;
             cursor: pointer;
             transition: all 0.2s ease;
             text-align: center;
@@ -102,8 +104,8 @@
             flex-direction: column;
             align-items: center;
             gap: 6px;
-            margin-top: 8px;
-            margin-bottom: 5px;
+            margin-top: 5px;
+            margin-bottom: 10px;
             width: 100%;
             max-width: 1000px;
         }
@@ -123,10 +125,10 @@
             background-color: #0A0A0A;
             border: 1px solid #FFD700;
             color: #FFD700;
-            padding: 6px 12px;
-            font-size: 13px;
+            padding: 6px 10px;
+            font-size: 12px;
             font-weight: 700;
-            border-radius: 10px;
+            border-radius: 8px;
             cursor: pointer;
             text-transform: uppercase;
             transition: all 0.2s ease;
@@ -152,7 +154,8 @@
         /* Leaderboard Table Container */
         .leaderboard-table {
             width: 100%;
-            margin-top: 10px;
+            max-width: 1000px;
+            margin-top: 5px;
             display: flex;
             flex-direction: column;
             gap: 8px;
@@ -161,15 +164,15 @@
         /* Header & Data Row Base Style */
         .leaderboard-row {
             border: 2px solid #22DD22;
-            border-radius: 25px;
+            border-radius: 20px;
             background-color: #000000;
             width: 100%;
-            padding: 14px 30px;
+            padding: 12px 20px;
             box-sizing: border-box;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 0 20px rgba(34, 221, 34, 0.3);
+            box-shadow: 0 0 15px rgba(34, 221, 34, 0.3);
         }
 
         .header-cell, .data-cell {
@@ -182,21 +185,21 @@
 
         .header-cell {
             color: #FFD700;
-            font-size: 32px;
+            font-size: 20px;
             font-weight: 800;
         }
 
         /* Data Rows bubble styling */
         .player-row {
             border: 2px solid #22DD22;
-            border-radius: 25px;
+            border-radius: 20px;
             background-color: #0A0A0A;
             box-shadow: 0 0 10px rgba(34, 221, 34, 0.15);
         }
 
         .data-cell {
             color: #FFFFFF;
-            font-size: 26px;
+            font-size: 20px;
             font-weight: 700;
         }
 
@@ -205,6 +208,49 @@
         .tier-silver { color: #C0C0C0; text-shadow: 0 0 8px rgba(192, 192, 192, 0.5); }
         .tier-gold { color: #FFD700; text-shadow: 0 0 8px rgba(255, 215, 0, 0.5); }
         .tier-platinum { color: #00FFFF; text-shadow: 0 0 8px rgba(0, 255, 255, 0.5); }
+
+        /* MOBILE RESPONSIVE MEDIA QUERY */
+        @media (max-width: 768px) {
+            .side-logo { max-height: 90px; }
+            .letters-img { max-height: 110px; }
+            .stream-title { font-size: 26px; }
+            
+            /* Hide the desktop header row on phones so it doesn't look squished */
+            .leaderboard-table > .leaderboard-row:first-child {
+                display: none;
+            }
+
+            /* Transform player rows into clean vertical card layout on mobile */
+            .player-row {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 6px;
+                padding: 14px 18px;
+                border-radius: 16px;
+            }
+
+            .player-row .data-cell {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                text-align: left;
+                font-size: 18px;
+                white-space: normal;
+                border-bottom: 1px solid rgba(34, 221, 34, 0.15);
+                padding-bottom: 4px;
+            }
+
+            .player-row .data-cell:last-child {
+                border-bottom: none;
+                padding-bottom: 0;
+            }
+
+            /* Inject mobile labels using data-attributes dynamically */
+            .player-row .data-cell:nth-child(1):before { content: "GAMERTAG: "; color: #FFD700; font-size: 14px; font-weight: 800; }
+            .player-row .data-cell:nth-child(2):before { content: "PLATFORM: "; color: #FFD700; font-size: 14px; font-weight: 800; }
+            .player-row .data-cell:nth-child(3):before { content: "WINS: "; color: #FFD700; font-size: 14px; font-weight: 800; }
+            .player-row .data-cell:nth-child(4):before { content: "RANK TIER: "; color: #FFD700; font-size: 14px; font-weight: 800; }
+        }
     </style>
 </head>
 <body>
@@ -219,7 +265,7 @@
 
         <h1 class="stream-title" id="pageTitle">STREAM STANDINGS</h1>
 
-        <!-- View Navigation Tabs (Master moved to the end) -->
+        <!-- View Navigation Tabs -->
         <div class="tab-bar">
             <button class="tab-btn active" onclick="switchTab('daily')">Daily</button>
             <button class="tab-btn" onclick="switchTab('weekly')">Weekly</button>
@@ -228,14 +274,12 @@
             <button class="tab-btn" onclick="switchTab('master')">Master</button>
         </div>
 
-        <!-- Yearly Sub-Selectors (Years + Months + All) -->
+        <!-- Yearly Sub-Selectors -->
         <div class="sub-selector-container" id="yearlySubSelector">
-            <!-- Year Selection Row -->
             <div class="selector-row" id="yearSelectorRow">
                 <button class="sub-btn year-btn active" onclick="switchYear('2026')">2026</button>
                 <button class="sub-btn year-btn" onclick="switchYear('2027')">2027</button>
             </div>
-            <!-- Month / All Selection Row -->
             <div class="selector-row" id="monthSelectorRow">
                 <button class="sub-btn active" onclick="switchMonth('ALL')">ALL</button>
                 <button class="sub-btn" onclick="switchMonth('JAN')">Jan</button>
