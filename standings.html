@@ -243,10 +243,20 @@
                 padding-bottom: 0;
             }
 
-            .player-row .data-cell:nth-child(1):before { content: "GAMERTAG: "; color: #FFD700; font-size: 14px; font-weight: 800; }
-            .player-row .data-cell:nth-child(2):before { content: "PLATFORM: "; color: #FFD700; font-size: 14px; font-weight: 800; }
-            .player-row .data-cell:nth-child(3):before { content: "WINS: "; color: #FFD700; font-size: 14px; font-weight: 800; }
-            .player-row .data-cell:nth-child(4):before { content: "RANK TIER: "; color: #FFD700; font-size: 14px; font-weight: 800; }
+            .player-row.empty-row .data-cell {
+                display: block;
+                border-bottom: none;
+                padding-bottom: 0;
+            }
+
+            .player-row.empty-row .data-cell:before {
+                content: none !important;
+            }
+
+            .player-row:not(.empty-row) .data-cell:nth-child(1):before { content: "GAMERTAG: "; color: #FFD700; font-size: 14px; font-weight: 800; }
+            .player-row:not(.empty-row) .data-cell:nth-child(2):before { content: "PLATFORM: "; color: #FFD700; font-size: 14px; font-weight: 800; }
+            .player-row:not(.empty-row) .data-cell:nth-child(3):before { content: "WINS: "; color: #FFD700; font-size: 14px; font-weight: 800; }
+            .player-row:not(.empty-row) .data-cell:nth-child(4):before { content: "RANK TIER: "; color: #FFD700; font-size: 14px; font-weight: 800; }
         }
     </style>
 </head>
@@ -438,8 +448,8 @@
             
             if (!playerList || playerList.length === 0) {
                 container.innerHTML = `
-                    <div class="leaderboard-row player-row" style="justify-content: center; padding: 25px; text-align: center;">
-                        <div class="data-cell" style="color: #8b949e; font-size: 18px; width: 100%; white-space: normal; text-align: center;">No standings recorded for this period.</div>
+                    <div class="leaderboard-row player-row empty-row" style="justify-content: center; padding: 25px; text-align: center;">
+                        <div class="data-cell" style="color: #FFD700; font-size: 18px; width: 100%; white-space: normal; text-align: center;">APOLOGIES: NO STANDINGS RECORDED FOR THIS PERIOD.</div>
                     </div>`;
                 return;
             }
