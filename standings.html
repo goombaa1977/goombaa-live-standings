@@ -403,21 +403,26 @@
         }
 
         function getCurrentDisplayData() {
-            let targetData = allData[currentTab] || [];
+            let targetData = [];
 
-            // If we are looking at the yearly tab, filter by year/month if data supports it,
-            // or return empty dataset if a future/blank month has no records.
-            if (currentTab === 'yearly') {
-                if (currentMonth !== 'ALL') {
-                    // Check if backend provides month-specific sub-keys or date fields, 
-                    // otherwise if no entries exist for this month context, default to empty.
-                    if (allData[`yearly_${currentYear}_${currentMonth}`]) {
-                        targetData = allData[`yearly_${currentYear}_${currentMonth}`];
-                    } else if (currentMonth !== 'AUG' && currentMonth !== 'JUL') {
-                        // Future or empty months with no recorded action will display blank/empty
+            // Only 2026 has data right now. 2027 should be completely blank.
+            if (currentYear === '2027') {
+                targetData = [];
+            } else if (currentTab === 'yearly') {
+                if (currentMonth === 'ALL') {
+                    // Show full year data for 2026
+                    targetData = allData['yearly'] || [];
+                } else {
+                    // For specific months in 2026, check if specific month data exists, 
+                    // otherwise default to blank (so July or future months don't show wrong data unless populated)
+                    if (allData[`yearly_2026_${currentMonth}`]) {
+                        targetData = allData[`yearly_2026_${currentMonth}`];
+                    } else {
                         targetData = [];
                     }
                 }
+            } else {
+                targetData = allData[currentTab] || [];
             }
 
             renderRows(targetData);
