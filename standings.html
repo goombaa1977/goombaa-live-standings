@@ -215,12 +215,10 @@
             .letters-img { max-height: 110px; }
             .stream-title { font-size: 26px; }
             
-            /* Hide the desktop header row on phones so it doesn't look squished */
             .leaderboard-table > .leaderboard-row:first-child {
                 display: none;
             }
 
-            /* Transform player rows into clean vertical card layout on mobile */
             .player-row {
                 flex-direction: column;
                 align-items: stretch;
@@ -245,7 +243,6 @@
                 padding-bottom: 0;
             }
 
-            /* Inject mobile labels using data-attributes dynamically */
             .player-row .data-cell:nth-child(1):before { content: "GAMERTAG: "; color: #FFD700; font-size: 14px; font-weight: 800; }
             .player-row .data-cell:nth-child(2):before { content: "PLATFORM: "; color: #FFD700; font-size: 14px; font-weight: 800; }
             .player-row .data-cell:nth-child(3):before { content: "WINS: "; color: #FFD700; font-size: 14px; font-weight: 800; }
@@ -360,7 +357,7 @@
                 titleEl.innerText = "MASTER STANDINGS";
             }
 
-            renderRows(allData[currentTab] || []);
+            getCurrentDisplayData();
         }
 
         function switchYear(yearStr) {
@@ -372,7 +369,7 @@
                 }
             });
             updateTitle();
-            renderRows(allData['yearly'] || []);
+            getCurrentDisplayData();
         }
 
         function switchMonth(monthCode) {
@@ -384,7 +381,7 @@
                 }
             });
             updateTitle();
-            renderRows(allData['yearly'] || []);
+            getCurrentDisplayData();
         }
 
         function updateTitle() {
@@ -405,9 +402,38 @@
             return { name: "-", cssClass: "" };
         }
 
+        function getCurrentDisplayData() {
+            let targetData = allData[currentTab] || [];
+
+            // If we are looking at the yearly tab, filter by year/month if data supports it,
+            // or return empty dataset if a future/blank month has no records.
+            if (currentTab === 'yearly') {
+                if (currentMonth !== 'ALL') {
+                    // Check if backend provides month-specific sub-keys or date fields, 
+                    // otherwise if no entries exist for this month context, default to empty.
+                    if (allData[`yearly_${currentYear}_${currentMonth}`]) {
+                        targetData = allData[`yearly_${currentYear}_${currentMonth}`];
+                    } else if (currentMonth !== 'AUG' && currentMonth !== 'JUL') {
+                        // Future or empty months with no recorded action will display blank/empty
+                        targetData = [];
+                    }
+                }
+            }
+
+            renderRows(targetData);
+        }
+
         function renderRows(playerList) {
             const container = document.getElementById('standings-rows');
             
+            if (!playerList || playerList.length === 0) {
+                container.innerHTML = `
+                    <div class="leaderboard-row player-row" style="justify-content: center; padding: 20px;">
+                        <div class="data-cell" style="color: #8b949e; font-size: 18px;">No standings recorded for this period.</div>
+                    </div>`;
+                return;
+            }
+
             const sortedList = [...playerList].sort((a, b) => {
                 const winsA = parseInt(a.wins, 10) || 0;
                 const winsB = parseInt(b.wins, 10) || 0;
@@ -438,10 +464,10 @@
                     const standingsData = await response.json();
                     if (standingsData && standingsData.daily) {
                         allData = standingsData;
-                        renderRows(allData[currentTab] || []);
+                        getCurrentDisplayData();
                     } else if (Array.isArray(standingsData)) {
                         allData.master = standingsData;
-                        renderRows(allData[currentTab] || []);
+                        getCurrentDisplayData();
                     }
                 }
             } catch (err) {
@@ -461,7 +487,7 @@
                     const message = JSON.parse(event.data);
                     if (message.type === "FULL_STATE" || message.type === "STANDINGS_UPDATE") {
                         if (message.data.daily) allData = message.data;
-                        renderRows(allData[currentTab] || []);
+                        getCurrentDisplayData();
                     }
                 } catch (e) {}
             };
