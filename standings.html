@@ -1,4 +1,408 @@
-function getCurrentDisplayData() {
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stream Standings</title>
+    <style>
+        body {
+            background-color: #050505;
+            color: #FFFFFF;
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1400px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Top Row: Goombaa1977 Letters Flanked by Logos */
+        .top-branding-row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            width: 100%;
+            margin-bottom: -10px;
+        }
+
+        .side-logo {
+            max-height: 150px;
+            width: auto;
+            object-fit: contain;
+            filter: drop-shadow(0 0 15px rgba(255, 165, 0, 0.6));
+        }
+
+        .letters-img {
+            max-height: 180px;
+            width: auto;
+            object-fit: contain;
+            filter: drop-shadow(0 0 20px rgba(34, 221, 34, 0.8));
+        }
+
+        /* Sub-Header: STREAM STANDINGS */
+        .stream-title {
+            color: #FFD700;
+            font-size: 38px;
+            font-weight: 900;
+            text-transform: uppercase;
+            text-align: center;
+            letter-spacing: 2px;
+            margin: 5px 0 15px 0;
+            text-shadow: 2px 2px 10px rgba(0,0,0,0.9);
+        }
+
+        /* Tab Bar Styles (5 Tabs) */
+        .tab-bar {
+            display: flex;
+            gap: 6px;
+            margin-top: 5px;
+            margin-bottom: 10px;
+            width: 100%;
+            max-width: 950px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            flex: 1;
+            min-width: 75px;
+            background-color: #000000;
+            border: 2px solid #22DD22;
+            color: #8b949e;
+            padding: 10px 6px;
+            font-size: 14px;
+            font-weight: 800;
+            text-transform: uppercase;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+            box-shadow: 0 0 10px rgba(34, 221, 34, 0.15);
+        }
+
+        .tab-btn.active {
+            background-color: #22DD22;
+            color: #000000;
+            border-color: #FFD700;
+            box-shadow: 0 0 15px rgba(34, 221, 34, 0.6);
+        }
+
+        /* Sub-Selector Container (Appears when Yearly is active) */
+        .sub-selector-container {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            margin-top: 5px;
+            margin-bottom: 10px;
+            width: 100%;
+            max-width: 1000px;
+        }
+
+        .sub-selector-container.visible {
+            display: flex;
+        }
+
+        .selector-row {
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .sub-btn {
+            background-color: #0A0A0A;
+            border: 1px solid #FFD700;
+            color: #FFD700;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            border-radius: 8px;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.2s ease;
+        }
+
+        .sub-btn.active {
+            background-color: #FFD700;
+            color: #000000;
+            box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+
+        .year-btn {
+            border-color: #22DD22;
+            color: #22DD22;
+        }
+
+        .year-btn.active {
+            background-color: #22DD22;
+            color: #000000;
+            box-shadow: 0 0 10px rgba(34, 221, 34, 0.5);
+        }
+
+        /* Leaderboard Table Container */
+        .leaderboard-table {
+            width: 100%;
+            max-width: 1000px;
+            margin-top: 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* Header & Data Row Base Style */
+        .leaderboard-row {
+            border: 2px solid #22DD22;
+            border-radius: 20px;
+            background-color: #000000;
+            width: 100%;
+            padding: 12px 20px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 0 15px rgba(34, 221, 34, 0.3);
+        }
+
+        .header-cell, .data-cell {
+            text-align: center;
+            flex-grow: 1;
+            flex-basis: 0;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .header-cell {
+            color: #FFD700;
+            font-size: 20px;
+            font-weight: 800;
+        }
+
+        /* Data Rows bubble styling */
+        .player-row {
+            border: 2px solid #22DD22;
+            border-radius: 20px;
+            background-color: #0A0A0A;
+            box-shadow: 0 0 10px rgba(34, 221, 34, 0.15);
+        }
+
+        .data-cell {
+            color: #FFFFFF;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        /* Tier Color Highlights */
+        .tier-bronze { color: #CD7F32; text-shadow: 0 0 8px rgba(205, 127, 50, 0.5); }
+        .tier-silver { color: #C0C0C0; text-shadow: 0 0 8px rgba(192, 192, 192, 0.5); }
+        .tier-gold { color: #FFD700; text-shadow: 0 0 8px rgba(255, 215, 0, 0.5); }
+        .tier-platinum { color: #00FFFF; text-shadow: 0 0 8px rgba(0, 255, 255, 0.5); }
+
+        /* MOBILE RESPONSIVE MEDIA QUERY */
+        @media (max-width: 768px) {
+            .side-logo { max-height: 90px; }
+            .letters-img { max-height: 110px; }
+            .stream-title { font-size: 26px; }
+            
+            .leaderboard-table > .leaderboard-row:first-child {
+                display: none;
+            }
+
+            .player-row {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 6px;
+                padding: 14px 18px;
+                border-radius: 16px;
+            }
+
+            .player-row .data-cell {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                text-align: left;
+                font-size: 18px;
+                white-space: normal;
+                border-bottom: 1px solid rgba(34, 221, 34, 0.15);
+                padding-bottom: 4px;
+            }
+
+            .player-row .data-cell:last-child {
+                border-bottom: none;
+                padding-bottom: 0;
+            }
+
+            .player-row .data-cell:nth-child(1):before { content: "GAMERTAG: "; color: #FFD700; font-size: 14px; font-weight: 800; }
+            .player-row .data-cell:nth-child(2):before { content: "PLATFORM: "; color: #FFD700; font-size: 14px; font-weight: 800; }
+            .player-row .data-cell:nth-child(3):before { content: "WINS: "; color: #FFD700; font-size: 14px; font-weight: 800; }
+            .player-row .data-cell:nth-child(4):before { content: "RANK TIER: "; color: #FFD700; font-size: 14px; font-weight: 800; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Top Branding -->
+        <div class="top-branding-row">
+            <img src="New Transparent Logo.PNG" alt="Logo Left" class="side-logo">
+            <img src="goombaa1977 letters.png" alt="Goombaa1977 Letters" class="letters-img">
+            <img src="New Transparent Logo.PNG" alt="Logo Right" class="side-logo">
+        </div>
+
+        <h1 class="stream-title" id="pageTitle">STREAM STANDINGS</h1>
+
+        <!-- View Navigation Tabs -->
+        <div class="tab-bar">
+            <button class="tab-btn active" onclick="switchTab('daily')">Daily</button>
+            <button class="tab-btn" onclick="switchTab('weekly')">Weekly</button>
+            <button class="tab-btn" onclick="switchTab('monthly')">Monthly</button>
+            <button class="tab-btn" onclick="switchTab('yearly')">Yearly</button>
+            <button class="tab-btn" onclick="switchTab('master')">Master</button>
+        </div>
+
+        <!-- Yearly Sub-Selectors -->
+        <div class="sub-selector-container" id="yearlySubSelector">
+            <div class="selector-row" id="yearSelectorRow">
+                <button class="sub-btn year-btn active" onclick="switchYear('2026')">2026</button>
+                <button class="sub-btn year-btn" onclick="switchYear('2027')">2027</button>
+            </div>
+            <div class="selector-row" id="monthSelectorRow">
+                <button class="sub-btn active" onclick="switchMonth('ALL')">ALL</button>
+                <button class="sub-btn" onclick="switchMonth('JAN')">Jan</button>
+                <button class="sub-btn" onclick="switchMonth('FEB')">Feb</button>
+                <button class="sub-btn" onclick="switchMonth('MAR')">Mar</button>
+                <button class="sub-btn" onclick="switchMonth('APR')">Apr</button>
+                <button class="sub-btn" onclick="switchMonth('MAY')">May</button>
+                <button class="sub-btn" onclick="switchMonth('JUN')">Jun</button>
+                <button class="sub-btn" onclick="switchMonth('JUL')">Jul</button>
+                <button class="sub-btn" onclick="switchMonth('AUG')">Aug</button>
+                <button class="sub-btn" onclick="switchMonth('SEP')">Sep</button>
+                <button class="sub-btn" onclick="switchMonth('OCT')">Oct</button>
+                <button class="sub-btn" onclick="switchMonth('NOV')">Nov</button>
+                <button class="sub-btn" onclick="switchMonth('DEC')">Dec</button>
+            </div>
+        </div>
+
+        <!-- Leaderboard Table -->
+        <div class="leaderboard-table">
+            <!-- Header Row -->
+            <div class="leaderboard-row">
+                <div class="header-cell">GAMERTAG</div>
+                <div class="header-cell">PLATFORM</div>
+                <div class="header-cell">WINS</div>
+                <div class="header-cell">RANK TIER</div>
+            </div>
+
+            <!-- Dynamic rows container -->
+            <div id="standings-rows" style="display: flex; flex-direction: column; gap: 8px;"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = window.location.origin.includes("http") ? `${window.location.origin}/api/standings` : "http://127.0.0.1:8000/api/standings";
+
+        let allData = {
+            daily: [],
+            weekly: [],
+            monthly: [],
+            master: [],
+            yearly: []
+        };
+        let currentTab = 'daily';
+        let currentYear = '2026';
+        let currentMonth = 'ALL';
+
+        function switchTab(tabName) {
+            currentTab = tabName;
+            
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            const subSelector = document.getElementById('yearlySubSelector');
+            const titleEl = document.getElementById('pageTitle');
+            const now = new Date();
+
+            if (tabName === 'daily') {
+                document.querySelectorAll('.tab-btn')[0].classList.add('active');
+                subSelector.classList.remove('visible');
+                titleEl.innerText = "STREAM STANDINGS";
+            } else if (tabName === 'weekly') {
+                document.querySelectorAll('.tab-btn')[1].classList.add('active');
+                subSelector.classList.remove('visible');
+                const firstDayOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+                const lastDayOfWeek = new Date(now.setDate(firstDayOfWeek.getDate() + 6));
+                const weekStr = `${firstDayOfWeek.toLocaleDateString('default', { month: 'short', day: 'numeric' })} - ${lastDayOfWeek.toLocaleDateString('default', { month: 'short', day: 'numeric' })}`.toUpperCase();
+                titleEl.innerText = `WEEKLY STANDINGS (${weekStr})`;
+            } else if (tabName === 'monthly') {
+                document.querySelectorAll('.tab-btn')[2].classList.add('active');
+                subSelector.classList.remove('visible');
+                const monthName = now.toLocaleString('default', { month: 'long' }).toUpperCase();
+                titleEl.innerText = `${monthName} STANDINGS`;
+            } else if (tabName === 'yearly') {
+                document.querySelectorAll('.tab-btn')[3].classList.add('active');
+                subSelector.classList.add('visible');
+                updateTitle();
+            } else if (tabName === 'master') {
+                document.querySelectorAll('.tab-btn')[4].classList.add('active');
+                subSelector.classList.remove('visible');
+                titleEl.innerText = "MASTER STANDINGS";
+            }
+
+            getCurrentDisplayData();
+        }
+
+        function switchYear(yearStr) {
+            currentYear = yearStr;
+            document.querySelectorAll('#yearSelectorRow .year-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.innerText.includes(yearStr)) {
+                    btn.classList.add('active');
+                }
+            });
+            updateTitle();
+            getCurrentDisplayData();
+        }
+
+        function switchMonth(monthCode) {
+            currentMonth = monthCode;
+            document.querySelectorAll('#monthSelectorRow .sub-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.innerText.toUpperCase() === monthCode) {
+                    btn.classList.add('active');
+                }
+            });
+            updateTitle();
+            getCurrentDisplayData();
+        }
+
+        function updateTitle() {
+            const titleEl = document.getElementById('pageTitle');
+            if (currentMonth === 'ALL') {
+                titleEl.innerText = `${currentYear} YEARLY ARCHIVE (ALL)`;
+            } else {
+                titleEl.innerText = `${currentYear} YEARLY ARCHIVE (${currentMonth})`;
+            }
+        }
+
+        function getTierInfo(winsCount) {
+            const w = parseInt(winsCount, 10) || 0;
+            if (w >= 151) return { name: "PLATINUM", cssClass: "tier-platinum" };
+            if (w >= 101) return { name: "GOLD", cssClass: "tier-gold" };
+            if (w >= 51)  return { name: "SILVER", cssClass: "tier-silver" };
+            if (w >= 1)   return { name: "BRONZE", cssClass: "tier-bronze" };
+            return { name: "-", cssClass: "" };
+        }
+
+        function getCurrentDisplayData() {
             let targetData = [];
 
             // 2027 and future/blank periods stay empty
@@ -8,8 +412,6 @@ function getCurrentDisplayData() {
                 if (currentMonth === 'ALL') {
                     targetData = allData['yearly'] || [];
                 } else {
-                    // This maps August (and other months) to look for your backend's specific keys,
-                    // falling back to the active monthly dataset if it matches current active periods.
                     const monthKey = `yearly_${currentYear}_${currentMonth}`;
                     const shortMonthKey = currentMonth.toLowerCase();
                     
@@ -18,7 +420,7 @@ function getCurrentDisplayData() {
                     } else if (allData[shortMonthKey]) {
                         targetData = allData[shortMonthKey];
                     } else if (currentMonth === 'AUG' && allData['monthly']) {
-                        // If August is the current active month, use the monthly standings data
+                        // Map August to current active monthly standings data since it's the active month
                         targetData = allData['monthly'];
                     } else {
                         targetData = [];
@@ -64,3 +466,42 @@ function getCurrentDisplayData() {
             });
             container.innerHTML = htmlContent;
         }
+
+        async function fetchStandings() {
+            try {
+                const response = await fetch(`${API_URL}?_t=${Date.now()}`);
+                if (response.ok) {
+                    const standingsData = await response.json();
+                    if (standingsData && standingsData.daily) {
+                        allData = standingsData;
+                        getCurrentDisplayData();
+                    } else if (Array.isArray(standingsData)) {
+                        allData.master = standingsData;
+                        getCurrentDisplayData();
+                    }
+                }
+            } catch (err) {
+                console.error("Error fetching standings API:", err);
+            }
+        }
+
+        fetchStandings();
+        setInterval(fetchStandings, 1000);
+
+        // Live WebSocket sync for multi-tab updating
+        try {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+            ws.onmessage = function(event) {
+                try {
+                    const message = JSON.parse(event.data);
+                    if (message.type === "FULL_STATE" || message.type === "STANDINGS_UPDATE") {
+                        if (message.data.daily) allData = message.data;
+                        getCurrentDisplayData();
+                    }
+                } catch (e) {}
+            };
+        } catch (e) {}
+    </script>
+</body>
+</html>
