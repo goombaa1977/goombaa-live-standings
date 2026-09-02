@@ -1,793 +1,778 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Goombaa Control Center - Mobile</title>
+"""
+Goombaa Control Center - Backend Web Server
+File: server.py
+Description: Full FastAPI backend with centralized backend KOTH slot rotation for both Player 1 and Player 2,
+independent multi-tier win cascading (including Yearly), and synchronized non-blocking Google Sheets background sync.
+"""
 
-    <style>
-        :root {
-            --bg-color: #0b0e14;
-            --panel-bg: #161c28;
-            --input-bg: #0d1117;
-            --border-color: #232d42;
-            --text-main: #ffffff;
-            --text-muted: #8b949e;
-            --accent-green: #00e676;
-            --accent-orange: #ff9900;
-            --accent-red: #ff3333;
-            --accent-blue: #00b0ff;
-            --accent-purple: #ab47bc;
-        }
+import os
+import sys
+import json
+import asyncio
+import urllib.request
+import urllib.parse
+from datetime import datetime
+from typing import List, Any, Dict
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import uvicorn
 
-        * { 
-            box-sizing: border-box; 
-            margin: 0; 
-            padding: 0; 
-            font-family: 'Segoe UI', Arial, sans-serif; 
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            user-select: none;
-        }
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+os.chdir(SCRIPT_DIR)
 
-        body { 
-            background-color: var(--bg-color); 
-            color: var(--text-main); 
-            padding: 10px; 
-            touch-action: manipulation;
-        }
+DAILY_FILE = os.path.join(SCRIPT_DIR, "standings_daily.json")
+WEEKLY_FILE = os.path.join(SCRIPT_DIR, "standings_weekly.json")
+MONTHLY_FILE = os.path.join(SCRIPT_DIR, "standings_monthly.json")
+YEARLY_FILE = os.path.join(SCRIPT_DIR, "standings_yearly.json")
+MASTER_FILE = os.path.join(SCRIPT_DIR, "standings.json")
+QUEUE_FILE = os.path.join(SCRIPT_DIR, "queue_cache.json")
+META_FILE = os.path.join(SCRIPT_DIR, "metadata.json")
 
-        .card {
-            background: var(--panel-bg);
-            border: 1.5px solid var(--border-color);
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
+GOOGLE_SHEET_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbys0_Xn7_xWLlIPMM5Dq99visJ7DcMlfDohkDv9nZR0Sn4E2ueWqwhyC41Aifb18enN_Q/exec"
 
-        h2 {
-            font-size: 12px;
-            font-weight: 900;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 4px;
-            color: var(--accent-blue);
-        }
+DEFAULT_STANDINGS = [
+    {"tag": "Goombaa", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"},
+    {"tag": "PhantomOrphan", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"},
+    {"tag": "Alec", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"},
+    {"tag": "Royal", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"},
+    {"tag": "Someguy", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"},
+    {"tag": "Brandy", "platform": "TikTok", "wins": "0", "points": "0", "rank": "-"},
+    {"tag": "Jonathan", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"},
+    {"tag": "Liam", "platform": "TikTok", "wins": "0", "points": "0", "rank": "-"},
+    {"tag": "Not A Saint", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"},
+    {"tag": "Nuber", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"},
+    {"tag": "Ocu", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"},
+    {"tag": "TMO", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"}
+]
 
-        .field-group { display: flex; flex-direction: column; gap: 4px; }
-        label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+def load_json_file(filepath: str, fallback_data: Any) -> Any:
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, "r") as f:
+                data = json.load(f)
+                if data:
+                    return data
+        except Exception:
+            pass
+    return fallback_data
 
-        .input-btn-row {
-            display: flex;
-            gap: 6px;
-            align-items: center;
-        }
+def save_json_file(filepath: str, data: Any):
+    try:
+        with open(filepath, "w") as f:
+            json.dump(data, f, indent=4)
+    except Exception as e:
+        print(f"Error saving {filepath}: {e}")
 
-        input[type="text"], select {
-            background: var(--input-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 5px;
-            padding: 10px;
-            color: var(--text-main);
-            font-size: 14px;
-            font-weight: 600;
-            outline: none;
-            -webkit-user-select: text;
-            user-select: text;
-            transition: border-color 0.2s, background-color 0.2s;
-            flex: 1;
-            width: 100%;
-        }
+def zero_out_wins_preserve_names(list_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    for player in list_data:
+        player["wins"] = "0"
+        player["points"] = "0"
+        player["rank"] = "-"
+    return list_data
 
-        select option {
-            background: var(--input-bg);
-            color: var(--text-main);
-        }
+def post_to_google_sheets(payload: dict):
+    try:
+        data_encoded = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(
+            GOOGLE_SHEET_WEB_APP_URL,
+            data=data_encoded,
+            headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
+        )
+        with urllib.request.urlopen(req, timeout=5) as response:
+            res_data = json.loads(response.read().decode())
+            return res_data
+    except Exception as e:
+        print(f"Error communicating with Google Sheets Web App: {e}")
+        return {"status": "error", "message": str(e)}
 
-        input[type="text"].drop-hover {
-            border-color: var(--accent-green) !important;
-            background-color: #1a2e22 !important;
-        }
+app = FastAPI(title="Goombaa Stream Control Center")
 
-        .btn-group { display: flex; gap: 6px; }
-        button {
-            cursor: pointer;
-            border: none;
-            border-radius: 5px;
-            padding: 12px 6px;
-            font-weight: 800;
-            text-transform: uppercase;
-            font-size: 10px;
-            touch-action: manipulation;
-        }
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-        .btn-green { background: var(--accent-green); color: #000; }
-        .btn-orange { background: var(--accent-orange); color: #000; }
-        .btn-red { background: var(--accent-red); color: #fff; }
-        .btn-blue { background: var(--accent-blue); color: #000; }
+initial_daily = load_json_file(DAILY_FILE, list(DEFAULT_STANDINGS))
+initial_weekly = load_json_file(WEEKLY_FILE, list(DEFAULT_STANDINGS))
+initial_monthly = load_json_file(MONTHLY_FILE, list(DEFAULT_STANDINGS))
+initial_yearly = load_json_file(YEARLY_FILE, list(DEFAULT_STANDINGS))
+initial_master = load_json_file(MASTER_FILE, list(DEFAULT_STANDINGS))
+initial_queue = load_json_file(QUEUE_FILE, [])
 
-        .top-button-group {
-            display: flex;
-            gap: 6px;
-        }
+# Safe Weekly Auto-Check on Startup
+try:
+    current_year, current_week, _ = datetime.now().isocalendar()
+    metadata = load_json_file(META_FILE, {})
+    last_week = metadata.get("last_weekly_reset_week")
+    
+    if last_week != current_week:
+        initial_weekly = zero_out_wins_preserve_names(initial_weekly)
+        save_json_file(WEEKLY_FILE, initial_weekly)
+        metadata["last_weekly_reset_week"] = current_week
+        save_json_file(META_FILE, metadata)
+        print(f"[Goombaa Control Center] New week detected ({current_week}). Weekly standings safely reset.")
+except Exception as e:
+    print(f"Error checking weekly reset: {e}")
 
-        .btn-third {
-            flex: 1;
-            border-radius: 6px;
-            font-size: 10px;
-            font-weight: 900;
-            padding: 10px 4px;
-            text-align: center;
-            letter-spacing: 0.3px;
-        }
+state: Dict[str, Any] = {
+    "match": {
+        "round": "FIGHTING NOW",
+        "p1": "Player 1",
+        "p2": "Player 2",
+        "player1": "Player 1",
+        "player2": "Player 2",
+        "score1": 0,
+        "score2": 0
+    },
+    "queue": initial_queue,
+    "banner": {
+        "active": False, "visible": False, "header": "NEXT HOUR", "text": "NEXT HOUR", "message": "", "subtext": ""
+    },
+    "cocommentator": {
+        "active": False, "host": "goombaa1977", "cohost": "", "name": ""
+    },
+    "charity": {
+        "raised": 20.0, "goal": 100.0
+    },
+    "standings": initial_master,
+    "standings_daily": initial_daily,
+    "standings_weekly": initial_weekly,
+    "standings_monthly": initial_monthly,
+    "standings_yearly": initial_yearly,
+    "standings_master": initial_master
+}
 
-        .btn-reset-third {
-            background: var(--accent-red);
-            color: #ffffff;
-            box-shadow: 0 4px 10px rgba(255, 51, 51, 0.25);
-        }
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
 
-        .btn-edit-third {
-            background: var(--accent-orange);
-            color: #000;
-            box-shadow: 0 4px 10px rgba(255, 153, 0, 0.25);
-        }
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        await websocket.send_text(json.dumps({"type": "FULL_STATE", "data": state}))
 
-        .btn-delete-third {
-            background: linear-gradient(135deg, #8e2de2, #4a00e0);
-            color: #ffffff;
-            box-shadow: 0 4px 10px rgba(142, 45, 226, 0.25);
-        }
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
 
-        .big-win-btn {
-            padding: 10px 14px;
-            font-size: 14px;
-            font-weight: 900;
-            background: var(--accent-green);
-            color: #000;
-            border-radius: 5px;
-            white-space: nowrap;
-        }
+    async def broadcast(self, message_type: str, payload: Any):
+        message = json.dumps({"type": message_type, "data": payload})
+        for connection in list(self.active_connections):
+            try:
+                await connection.send_text(message)
+            except Exception:
+                self.disconnect(connection)
 
-        .queue-display {
-            background: var(--input-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            min-height: 90px;
-            padding: 6px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
+manager = ConnectionManager()
 
-        .queue-row {
-            display: flex;
-            flex-direction: column;
-            background: #161c28;
-            padding: 8px 10px;
-            border-radius: 5px;
-            border: 1px solid var(--border-color);
-            gap: 6px;
-            touch-action: none;
-        }
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
 
-        .queue-header-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+@app.get("/api/state")
+@app.get("/api/match")
+async def get_match():
+    return state["match"]
 
-        .player-tag-span { 
-            font-size: 14px;
-            font-weight: 800;
-            white-space: nowrap; 
-            overflow: hidden; 
-            text-overflow: ellipsis; 
-            color: var(--text-main);
-        }
+@app.post("/api/match")
+async def post_match(req: Request):
+    data = await req.json()
+    if "round" in data: state["match"]["round"] = data["round"]
+    p1_val = data.get("p1") or data.get("player1")
+    p2_val = data.get("p2") or data.get("player2")
+    if p1_val is not None:
+        state["match"]["p1"] = p1_val
+        state["match"]["player1"] = p1_val
+    if p2_val is not None:
+        state["match"]["p2"] = p2_val
+        state["match"]["player2"] = p2_val
+    await manager.broadcast("MATCH_UPDATE", state["match"])
+    await manager.broadcast("FULL_STATE", state)
+    return state["match"]
 
-        .action-btns { display: flex; gap: 4px; align-items: center; width: 100%; }
-        .small-btn { padding: 8px 6px; font-size: 10px; line-height: 1; flex: 1; text-align: center; }
+@app.get("/api/queue")
+async def get_queue():
+    return state["queue"]
 
-        /* Floating Drag Ghost for Touch */
-        .drag-ghost {
-            position: fixed;
-            pointer-events: none;
-            z-index: 9999;
-            opacity: 0.85;
-            background: var(--accent-blue);
-            color: #000;
-            padding: 8px 12px;
-            border-radius: 5px;
-            font-weight: 800;
-            font-size: 14px;
-            box-shadow: 0px 4px 10px rgba(0,0,0,0.5);
-            transform: translate(-50%, -50%);
-        }
+@app.post("/api/queue")
+async def set_queue(req: Request):
+    data = await req.json()
+    if isinstance(data, list):
+        state["queue"] = data
+        save_json_file(QUEUE_FILE, state["queue"])
+    await manager.broadcast("QUEUE_UPDATE", state["queue"])
+    await manager.broadcast("FULL_STATE", state)
+    return state["queue"]
 
-        /* Modal Popup Styles */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.75);
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-        .modal-content {
-            background-color: var(--panel-bg);
-            border: 1.5px solid var(--border-color);
-            padding: 16px;
-            border-radius: 8px;
-            width: 85%;
-            max-width: 320px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .modal-title {
-            font-size: 12px;
-            font-weight: 900;
-            color: var(--accent-red);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-    </style>
-</head>
-<body>
+@app.post("/api/queue/clear")
+async def clear_queue():
+    state["queue"] = []
+    save_json_file(QUEUE_FILE, [])
+    await manager.broadcast("QUEUE_UPDATE", state["queue"])
+    await manager.broadcast("FULL_STATE", state)
+    return []
 
-    <!-- TOP CONTROL BUTTON GROUP (Reset, Edit, Delete) -->
-    <div class="card">
-        <div class="top-button-group">
-            <button class="btn-third btn-reset-third" onclick="openResetModal()">⚠️ RESET</button>
-            <button class="btn-third btn-edit-third" onclick="openEditModal()">✏️ EDIT</button>
-            <button class="btn-third btn-delete-third" onclick="openDeleteModal()">🗑️ DELETE</button>
-        </div>
-    </div>
+@app.get("/api/queue/next_match")
+@app.post("/api/queue/next_match")
+async def next_match(req: Request = None):
+    winner = "p1"
+    try:
+        if req:
+            body = await req.json()
+            winner = str(body.get("winner", "p1")).lower()
+    except Exception:
+        pass
 
-    <!-- ACTIVE MATCH CARD -->
-    <div class="card">
-        <h2>Active Match (KotH)</h2>
+    if len(state["queue"]) > 0:
+        next_player = state["queue"].pop(0)
+        p1_current = state["match"].get("p1") or state["match"].get("player1")
+        p2_current = state["match"].get("p2") or state["match"].get("player2")
 
-        <div class="field-group">
-            <label>Round Label</label>
-            <input type="text" id="roundLabel" value="FIGHTING NOW">
-        </div>
+        if winner == "p2" or winner == "player2":
+            current_loser = p1_current
+            state["match"]["p1"] = p2_current
+            state["match"]["player1"] = p2_current
+            state["match"]["p2"] = next_player
+            state["match"]["player2"] = next_player
+        else:
+            current_loser = p2_current
+            state["match"]["p2"] = next_player
+            state["match"]["player2"] = next_player
 
-        <div class="field-group">
-            <label>Player 1 Tag (Drop tag here)</label>
-            <div class="input-btn-row">
-                <input type="text" id="p1Input" value="Player 1">
-                <button class="big-win-btn" onclick="handleWinAndAdvance('p1')">+1 W</button>
-            </div>
-        </div>
+        if current_loser and current_loser not in ["Player 1", "Player 2"] and current_loser not in state["queue"]:
+            state["queue"].append(current_loser)
 
-        <div class="field-group">
-            <label>Player 2 Tag (Drop tag here)</label>
-            <div class="input-btn-row">
-                <input type="text" id="p2Input" value="Player 2">
-                <button class="big-win-btn" onclick="handleWinAndAdvance('p2')">+1 W</button>
-            </div>
-        </div>
+        save_json_file(QUEUE_FILE, state["queue"])
 
-        <div class="btn-group" style="margin-top: 4px;">
-            <button class="btn-green" style="flex:2" onclick="updateActiveMatch()">Update Match</button>
-            <button class="btn-orange" style="flex:1" onclick="undoActiveWin()">Undo</button>
-        </div>
-    </div>
+    await manager.broadcast("MATCH_UPDATE", state["match"])
+    await manager.broadcast("QUEUE_UPDATE", state["queue"])
+    await manager.broadcast("FULL_STATE", state)
+    return {"status": "success", "match": state["match"], "queue": state["queue"]}
 
-    <!-- QUEUE MANAGER CARD -->
-    <div class="card">
-        <h2>Queue Manager</h2>
+@app.get("/api/standings")
+async def get_standings():
+    try:
+        def fetch_google():
+            req = urllib.request.Request(GOOGLE_SHEET_WEB_APP_URL, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=2) as response:
+                return json.loads(response.read().decode())
 
-        <div class="field-group">
-            <div class="btn-group">
-                <input type="text" id="queueInput" placeholder="Add tag..." style="flex:1">
-                <button class="btn-blue" onclick="addPlayerToQueue()">Add</button>
-            </div>
-        </div>
-
-        <div class="queue-display" id="queueContainer"></div>
-        <button class="btn-red" style="margin-top: 4px;" onclick="clearQueue()">Clear Queue</button>
-    </div>
-
-    <!-- Reset Standings Modal Popup -->
-    <div id="resetModal" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-title">Reset Standings</div>
-            <div style="font-size: 11px; color: var(--text-muted);">Choose which leaderboard to reset:</div>
-            <div class="btn-group" style="flex-direction: column; gap: 6px;">
-                <button class="btn-orange" style="padding: 10px;" onclick="confirmReset('daily')">Reset Daily</button>
-                <button class="btn-orange" style="padding: 10px;" onclick="confirmReset('weekly')">Reset Weekly</button>
-                <button class="btn-orange" style="padding: 10px;" onclick="confirmReset('monthly')">Reset Monthly</button>
-                <button class="btn-red" style="padding: 10px;" onclick="confirmReset('all')">Reset All</button>
-            </div>
-            <button class="btn-blue" style="margin-top: 4px; padding: 10px;" onclick="closeResetModal()">Cancel</button>
-        </div>
-    </div>
-
-    <!-- Edit Player Modal Popup -->
-    <div id="editModal" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-title" style="color: var(--accent-orange);">Edit Player Tag & Platform</div>
-            <div class="field-group">
-                <label>Current Tag</label>
-                <input type="text" id="editOldTagInput" placeholder="Old gamertag...">
-            </div>
-            <div class="field-group">
-                <label>New Tag (Optional)</label>
-                <input type="text" id="editNewTagInput" placeholder="Leave blank to keep same...">
-            </div>
-            <div class="field-group">
-                <label>Platform</label>
-                <select id="editPlatformSelect">
-                    <option value="Twitch">Twitch</option>
-                    <option value="TikTok">TikTok</option>
-                    <option value="YouTube">YouTube</option>
-                </select>
-            </div>
-            <div class="btn-group" style="margin-top: 4px;">
-                <button class="btn-orange" style="flex:1" onclick="confirmEditPlayer()">Save</button>
-                <button class="btn-red" style="flex:1" onclick="closeEditModal()">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Delete Player Modal Popup -->
-    <div id="deleteModal" class="modal-overlay">
-        <div class="modal-content">
-            <div class="modal-title" style="color: var(--accent-red);">Delete Player from Standings</div>
-            <div class="field-group">
-                <label>Exact Gamertag</label>
-                <input type="text" id="deleteTagInput" placeholder="Enter gamertag...">
-            </div>
-            <div class="btn-group" style="margin-top: 4px;">
-                <button class="btn-red" style="flex:1" onclick="confirmDeletePlayer()">Delete</button>
-                <button class="btn-orange" style="flex:1" onclick="closeDeleteModal()">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const API_BASE = window.location.origin.includes("http") ? `${window.location.origin}/api` : "http://127.0.0.1:8000/api";
+        data = await asyncio.to_thread(fetch_google)
         
-        let isEditingMatch = false;
-        let isEditingQueueItem = false;
-        let localQueue = [];
-
-        // Mobile Touch Dragging State Variables
-        let activeTouchIndex = null;
-        let touchGhost = null;
-
-        const p1Input = document.getElementById('p1Input');
-        const p2Input = document.getElementById('p2Input');
-        const queueInput = document.getElementById('queueInput');
-
-        p1Input.addEventListener('focus', () => isEditingMatch = true);
-        p1Input.addEventListener('blur', () => isEditingMatch = false);
-        p2Input.addEventListener('focus', () => isEditingMatch = true);
-        p2Input.addEventListener('blur', () => isEditingMatch = false);
-        document.getElementById('roundLabel').addEventListener('focus', () => isEditingMatch = true);
-        document.getElementById('roundLabel').addEventListener('blur', () => isEditingMatch = false);
-
-        queueInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                addPlayerToQueue();
-            }
-        });
-
-        document.getElementById('deleteTagInput').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                confirmDeletePlayer();
-            }
-        });
-
-        document.getElementById('editNewTagInput').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                confirmEditPlayer();
-            }
-        });
-
-        async function syncState() {
-            if (activeTouchIndex !== null || isEditingQueueItem) return;
-
-            try {
-                const matchRes = await fetch(`${API_BASE}/match`);
-                const matchData = await matchRes.json();
-                if (!isEditingMatch && matchData) {
-                    document.getElementById('roundLabel').value = matchData.round || "FIGHTING NOW";
-                    p1Input.value = matchData.p1 || matchData.player1 || "Player 1";
-                    p2Input.value = matchData.p2 || matchData.player2 || "Player 2";
-                }
-
-                const queueRes = await fetch(`${API_BASE}/queue`);
-                const queueData = await queueRes.json();
-                if (Array.isArray(queueData)) {
-                    localQueue = queueData;
-                    renderQueueUI(localQueue);
-                }
-            } catch (e) {}
-        }
-
-        function renderQueueUI(queue) {
-            if (isEditingQueueItem || activeTouchIndex !== null) return;
-            const container = document.getElementById('queueContainer');
-            container.innerHTML = '';
-
-            if (!queue || queue.length === 0) {
-                container.innerHTML = `<div style="color: var(--text-muted); font-size: 11px; text-align: center; padding: 20px 0;">Queue Empty</div>`;
-                return;
-            }
-
-            queue.forEach((player, idx) => {
-                const row = document.createElement('div');
-                row.className = 'queue-row';
-                row.innerHTML = `
-                    <div class="queue-header-row">
-                        <span class="player-tag-span">☰ ${idx + 1}. ${player}</span>
-                    </div>
-                    <div class="action-btns">
-                        <button class="small-btn btn-green" onclick="addQueueWin(${idx})">+1 W</button>
-                        <button class="small-btn btn-orange" onclick="undoQueueWin(${idx})">UNDO</button>
-                        <button class="small-btn btn-blue" onclick="moveUp(${idx})">▲</button>
-                        <button class="small-btn btn-blue" onclick="moveDown(${idx})">▼</button>
-                        <button class="small-btn btn-orange" onclick="editItem(${idx})">EDIT</button>
-                        <button class="small-btn btn-red" style="flex:0.5;" onclick="removeQueueIndex(${idx})">X</button>
-                    </div>
-                `;
-
-                const header = row.querySelector('.queue-header-row');
-                header.addEventListener('touchstart', (e) => handleTouchStart(e, idx, player), { passive: false });
-                header.addEventListener('touchmove', handleTouchMove, { passive: false });
-                header.addEventListener('touchend', handleTouchEnd, { passive: false });
-
-                container.appendChild(row);
-            });
-        }
-
-        /* Pure Mobile Touch-Drag Engine */
-        function handleTouchStart(e, index, playerName) {
-            activeTouchIndex = index;
-            const touch = e.touches[0];
-
-            touchGhost = document.createElement('div');
-            touchGhost.className = 'drag-ghost';
-            touchGhost.innerText = playerName;
-            touchGhost.style.left = touch.clientX + 'px';
-            touchGhost.style.top = touch.clientY + 'px';
-            document.body.appendChild(touchGhost);
-        }
-
-        function handleTouchMove(e) {
-            if (activeTouchIndex === null || !touchGhost) return;
-            e.preventDefault();
-
-            const touch = e.touches[0];
-            touchGhost.style.left = touch.clientX + 'px';
-            touchGhost.style.top = touch.clientY + 'px';
-
-            const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
-            p1Input.classList.remove('drop-hover');
-            p2Input.classList.remove('drop-hover');
-
-            if (targetEl === p1Input) p1Input.classList.add('drop-hover');
-            if (targetEl === p2Input) p2Input.classList.add('drop-hover');
-        }
-
-        async function handleTouchEnd(e) {
-            if (activeTouchIndex === null) return;
-            const touch = e.changedTouches[0];
-            const dropTarget = document.elementFromPoint(touch.clientX, touch.clientY);
-
-            p1Input.classList.remove('drop-hover');
-            p2Input.classList.remove('drop-hover');
-
-            if (touchGhost) {
-                touchGhost.remove();
-                touchGhost = null;
-            }
-
-            const dragIdx = activeTouchIndex;
-            activeTouchIndex = null;
-
-            if (dragIdx < 0 || dragIdx >= localQueue.length) return;
-
-            if (dropTarget === p1Input) {
-                await sendToMatch(dragIdx, 'p1');
-                return;
-            }
-
-            if (dropTarget === p2Input) {
-                await sendToMatch(dragIdx, 'p2');
-                return;
-            }
-
-            let targetRow = dropTarget ? dropTarget.closest('.queue-row') : null;
-            if (targetRow && targetRow.parentNode) {
-                const rows = Array.from(targetRow.parentNode.children);
-                const dropIdx = rows.indexOf(targetRow);
-
-                if (dropIdx !== -1 && dropIdx !== dragIdx) {
-                    const movedItem = localQueue.splice(dragIdx, 1)[0];
-                    localQueue.splice(dropIdx, 0, movedItem);
-                    renderQueueUI(localQueue);
-                    await syncQueue();
-                }
-            }
-        }
-
-        async function sendToMatch(index, slot) {
-            if (index < 0 || index >= localQueue.length) return;
-
-            const selectedPlayer = localQueue.splice(index, 1)[0];
-            const currentP1 = p1Input.value.trim();
-            const currentP2 = p2Input.value.trim();
-
-            if (slot === 'p1') {
-                if (currentP1 && currentP1 !== "Player 1") {
-                    localQueue.push(currentP1);
-                }
-                p1Input.value = selectedPlayer;
-            } else if (slot === 'p2') {
-                if (currentP2 && currentP2 !== "Player 2") {
-                    localQueue.push(currentP2);
-                }
-                p2Input.value = selectedPlayer;
-            }
-
-            renderQueueUI(localQueue);
-            await updateActiveMatch();
-            await syncQueue();
-        }
-
-        /* Original Working handleWinAndAdvance Logic */
-        async function handleWinAndAdvance(winnerSlot) {
-            const winnerTag = winnerSlot === 'p1' ? p1Input.value.trim() : p2Input.value.trim();
-            if (!winnerTag || winnerTag === "Player 1" || winnerTag === "Player 2") return;
-
-            // 1. Record win on the backend and update Google Sheets / standings
-            await fetch(`${API_BASE}/win`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ tag: winnerTag, amount: 1, auto_add: true })
-            });
-
-            // 2. Perform local KOTH queue rotation
-            if (localQueue.length > 0) {
-                const nextChallenger = localQueue.shift();
-                let losingPlayer = "";
-
-                if (winnerSlot === 'p1') {
-                    losingPlayer = p2Input.value.trim();
-                    p2Input.value = nextChallenger;
-                } else {
-                    losingPlayer = p1Input.value.trim();
-                    p1Input.value = p2Input.value.trim();
-                    p2Input.value = nextChallenger;
-                }
-
-                if (losingPlayer && losingPlayer !== "Player 1" && losingPlayer !== "Player 2" && !localQueue.includes(losingPlayer)) {
-                    localQueue.push(losingPlayer);
-                }
-
-                renderQueueUI(localQueue);
-                await updateActiveMatch();
-                await syncQueue();
-            }
-        }
-
-        async function undoActiveWin() {
-            const p1Tag = p1Input.value.trim();
-            const p2Tag = p2Input.value.trim();
-
-            await fetch(`${API_BASE}/win/undo`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ p1: p1Tag, p2: p2Tag })
-            });
-        }
-
-        async function addQueueWin(index) {
-            if (index < 0 || index >= localQueue.length) return;
-            const playerTag = localQueue[index];
-
-            await fetch(`${API_BASE}/win`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ tag: playerTag, amount: 1, auto_add: true })
-            });
-        }
-
-        async function undoQueueWin(index) {
-            if (index < 0 || index >= localQueue.length) return;
-            const playerTag = localQueue[index];
-
-            await fetch(`${API_BASE}/win/undo`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ tag: playerTag })
-            });
-        }
-
-        async function moveUp(index) {
-            if (index > 0) {
-                const item = localQueue.splice(index, 1)[0];
-                localQueue.splice(index - 1, 0, item);
-                renderQueueUI(localQueue);
-                await syncQueue();
-            }
-        }
-
-        async function moveDown(index) {
-            if (index < localQueue.length - 1) {
-                const item = localQueue.splice(index, 1)[0];
-                localQueue.splice(index + 1, 0, item);
-                renderQueueUI(localQueue);
-                await syncQueue();
-            }
-        }
-
-        function editItem(index) {
-            isEditingQueueItem = true;
-            const newName = prompt("Edit player tag:", localQueue[index]);
-            if (newName !== null && newName.trim() !== "") {
-                localQueue[index] = newName.trim();
-                renderQueueUI(localQueue);
-                syncQueue();
-            }
-            isEditingQueueItem = false;
-        }
-
-        async function updateActiveMatch() {
-            const payload = {
-                round: document.getElementById('roundLabel').value,
-                p1: p1Input.value,
-                p2: p2Input.value,
-                player1: p1Input.value,
-                player2: p2Input.value
-            };
-            await fetch(`${API_BASE}/match`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(payload)
-            });
-            syncState();
-        }
-
-        async function addPlayerToQueue() {
-            const name = queueInput.value.trim();
-            if (!name) return;
-            localQueue.push(name);
-            renderQueueUI(localQueue);
-            queueInput.value = '';
-            await syncQueue();
-        }
-
-        async function removeQueueIndex(index) {
-            if (index >= 0 && index < localQueue.length) {
-                localQueue.splice(index, 1);
-                renderQueueUI(localQueue);
-                await syncQueue();
-            }
-        }
-
-        async function clearQueue() {
-            localQueue = [];
-            renderQueueUI(localQueue);
-            await fetch(`${API_BASE}/queue/clear`, { method: 'POST' });
-        }
-
-        async function syncQueue() {
-            await fetch(`${API_BASE}/queue`, { 
-                method: 'POST', 
-                headers: {'Content-Type': 'application/json'}, 
-                body: JSON.stringify(localQueue) 
-            });
-        }
-
-        /* Reset Modal Functions */
-        function openResetModal() {
-            document.getElementById('resetModal').style.display = 'flex';
-        }
-
-        function closeResetModal() {
-            document.getElementById('resetModal').style.display = 'none';
-        }
-
-        async function confirmReset(scope) {
-            if (confirm(`Are you sure you want to reset [ ${scope.toUpperCase()} ] standings?`)) {
-                try {
-                    await fetch(`${API_BASE}/standings/reset`, {
-                        method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ scope: scope })
-                    });
-                    alert(`Successfully reset ${scope} standings.`);
-                } catch (e) {
-                    console.error("Reset error:", e);
-                }
-            }
-            closeResetModal();
-        }
-
-        /* Edit Player Modal Functions */
-        function openEditModal() {
-            document.getElementById('editOldTagInput').value = "";
-            document.getElementById('editNewTagInput').value = "";
-            document.getElementById('editPlatformSelect').value = "Twitch";
-            document.getElementById('editModal').style.display = 'flex';
-            document.getElementById('editOldTagInput').focus();
-        }
-
-        function closeEditModal() {
-            document.getElementById('editModal').style.display = 'none';
-        }
-
-        async function confirmEditPlayer() {
-            const oldTag = document.getElementById('editOldTagInput').value.trim();
-            let newTag = document.getElementById('editNewTagInput').value.trim();
-            const platform = document.getElementById('editPlatformSelect').value;
+        if data and ("daily" in data or "master" in data):
+            for tier_key in ["daily", "weekly", "monthly", "yearly", "master"]:
+                if tier_key in data:
+                    for p in data[tier_key]:
+                        p["wins"] = str(p.get("wins", "0"))
+                        p["points"] = "0"
             
-            if (!oldTag) return;
-            if (!newTag) newTag = oldTag;
+            state["standings_daily"] = data.get("daily", state["standings_daily"])
+            state["standings_weekly"] = data.get("weekly", state["standings_weekly"])
+            state["standings_monthly"] = data.get("monthly", state["standings_monthly"])
+            state["standings_yearly"] = data.get("yearly", state["standings_yearly"])
+            state["standings_master"] = data.get("master", state["standings_master"])
+            state["standings"] = state["standings_master"]
+            
+            save_json_file(DAILY_FILE, state["standings_daily"])
+            save_json_file(WEEKLY_FILE, state["standings_weekly"])
+            save_json_file(MONTHLY_FILE, state["standings_monthly"])
+            save_json_file(YEARLY_FILE, state["standings_yearly"])
+            save_json_file(MASTER_FILE, state["standings_master"])
+    except Exception as e:
+        print(f"Notice: Google Sheets fetch skipped/timed out, serving local cache: {e}")
 
-            try {
-                const res = await fetch(`${API_BASE}/standings/edit`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ old_tag: oldTag, new_tag: newTag, platform: platform })
-                });
-                if (res.ok) {
-                    alert(`Player "${oldTag}" successfully updated (${platform}).`);
-                }
-            } catch (e) {
-                console.error("Edit player error:", e);
-            }
+    return {
+        "daily": state["standings_daily"],
+        "weekly": state["standings_weekly"],
+        "monthly": state["standings_monthly"],
+        "yearly": state["standings_yearly"],
+        "master": state["standings_master"]
+    }
 
-            closeEditModal();
+def update_wins_in_list(list_data: List[Dict[str, Any]], tag: str, amount: int) -> tuple:
+    found_player = None
+    for p in list_data:
+        if p["tag"].lower() == tag.lower():
+            current_wins = int(p.get("wins", "0")) + amount
+            p["wins"] = str(max(0, current_wins))
+            p["points"] = "0"
+            w = int(p["wins"])
+            if w >= 151: p["rank"] = "Platinum"
+            elif w >= 101: p["rank"] = "Gold"
+            elif w >= 51: p["rank"] = "Silver"
+            elif w >= 1: p["rank"] = "Bronze"
+            else: p["rank"] = "-"
+            found_player = p
+            break
+    if not found_player:
+        w = amount
+        if w >= 151: r_tier = "Platinum"
+        elif w >= 101: r_tier = "Gold"
+        elif w >= 51: r_tier = "Silver"
+        elif w >= 1: r_tier = "Bronze"
+        else: r_tier = "-"
+        found_player = {
+            "tag": tag,
+            "platform": "Twitch",
+            "wins": str(amount),
+            "points": "0",
+            "rank": r_tier
         }
+        list_data.append(found_player)
+    return list_data, found_player
 
-        /* Delete Player Modal Functions */
-        function openDeleteModal() {
-            document.getElementById('deleteTagInput').value = "";
-            document.getElementById('deleteModal').style.display = 'flex';
-            document.getElementById('deleteTagInput').focus();
-        }
+@app.post("/api/win")
+async def add_win(req: Request):
+    data = await req.json()
+    tag = data.get("tag", "").strip()
+    amount = int(data.get("amount", 1))
+    auto_add = data.get("auto_add", True)
 
-        function closeDeleteModal() {
-            document.getElementById('deleteModal').style.display = 'none';
-        }
+    if not tag or tag in ["Player 1", "Player 2"]:
+        return {"status": "ignored"}
 
-        async function confirmDeletePlayer() {
-            const tag = document.getElementById('deleteTagInput').value.trim();
-            if (!tag) return;
+    # 1. Independently increment and cascade the win across ALL five local tiers
+    state["standings_daily"], updated_p_daily = update_wins_in_list(state["standings_daily"], tag, amount)
+    save_json_file(DAILY_FILE, state["standings_daily"])
 
-            try {
-                const res = await fetch(`${API_BASE}/standings/delete`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ tag: tag })
-                });
-                if (res.ok) {
-                    alert(`Player "${tag}" has been deleted from standings.`);
-                }
-            } catch (e) {
-                console.error("Delete player error:", e);
-            }
+    state["standings_weekly"], updated_p_weekly = update_wins_in_list(state["standings_weekly"], tag, amount)
+    save_json_file(WEEKLY_FILE, state["standings_weekly"])
 
-            closeDeleteModal();
-        }
+    state["standings_monthly"], updated_p_monthly = update_wins_in_list(state["standings_monthly"], tag, amount)
+    save_json_file(MONTHLY_FILE, state["standings_monthly"])
 
-        setInterval(syncState, 1000);
-        syncState();
-    </script>
-</body>
-</html>
+    state["standings_yearly"], updated_p_yearly = update_wins_in_list(state["standings_yearly"], tag, amount)
+    save_json_file(YEARLY_FILE, state["standings_yearly"])
+
+    state["standings_master"], updated_p_master = update_wins_in_list(state["standings_master"], tag, amount)
+    state["standings"] = state["standings_master"]
+    save_json_file(MASTER_FILE, state["standings_master"])
+
+    # 2. Push each tier's independent accumulated total to Google Sheets sequentially in the background
+    async def background_sync_sheets():
+        tiers_data = [
+            ("daily", updated_p_daily),
+            ("weekly", updated_p_weekly),
+            ("monthly", updated_p_monthly),
+            ("yearly", updated_p_yearly),
+            ("master", updated_p_master)
+        ]
+        for tier_key, p_obj in tiers_data:
+            await asyncio.to_thread(post_to_google_sheets, {
+                "action": "update",
+                "tier": tier_key,
+                "tag": tag,
+                "platform": p_obj.get("platform", "Twitch"),
+                "wins": int(p_obj.get("wins", amount))
+            })
+            await asyncio.sleep(0.4)
+
+    asyncio.create_task(background_sync_sheets())
+
+    # --- PROTECTED KOTH ROTATION LOGIC ---
+    if auto_add:
+        p1_current = str(state["match"].get("p1") or state["match"].get("player1") or "").strip()
+        p2_current = str(state["match"].get("p2") or state["match"].get("player2") or "").strip()
+
+        if p1_current.lower() == p2_current.lower() and len(state["queue"]) > 0:
+            p2_current = state["queue"].pop(0)
+            state["match"]["p2"] = p2_current
+            state["match"]["player2"] = p2_current
+
+        if tag.lower() == p2_current.lower():
+            loser = p1_current
+            state["match"]["p1"] = p2_current
+            state["match"]["player1"] = p2_current
+
+            if len(state["queue"]) > 0:
+                next_challenger = state["queue"].pop(0)
+                state["match"]["p2"] = next_challenger
+                state["match"]["player2"] = next_challenger
+            else:
+                state["match"]["p2"] = "Player 2"
+                state["match"]["player2"] = "Player 2"
+
+            if loser and loser not in ["Player 1", "Player 2", ""] and loser not in state["queue"]:
+                state["queue"].append(loser)
+
+            save_json_file(QUEUE_FILE, state["queue"])
+
+        elif tag.lower() == p1_current.lower():
+            loser = p2_current
+
+            if len(state["queue"]) > 0:
+                next_challenger = state["queue"].pop(0)
+                state["match"]["p2"] = next_challenger
+                state["match"]["player2"] = next_challenger
+            else:
+                state["match"]["p2"] = "Player 2"
+                state["match"]["player2"] = "Player 2"
+
+            if loser and loser not in ["Player 1", "Player 2", ""] and loser not in state["queue"]:
+                state["queue"].append(loser)
+
+            save_json_file(QUEUE_FILE, state["queue"])
+    # --- END OF PROTECTED KOTH ROTATION LOGIC ---
+
+    payload_full = {
+        "daily": state["standings_daily"],
+        "weekly": state["standings_weekly"],
+        "monthly": state["standings_monthly"],
+        "yearly": state["standings_yearly"],
+        "master": state["standings_master"]
+    }
+    await manager.broadcast("STANDINGS_UPDATE", payload_full)
+    await manager.broadcast("MATCH_UPDATE", state["match"])
+    await manager.broadcast("QUEUE_UPDATE", state["queue"])
+    await manager.broadcast("FULL_STATE", state)
+    return {"status": "success", "standings": payload_full, "match": state["match"], "queue": state["queue"]}
+
+@app.post("/api/win/undo")
+async def undo_win(req: Request):
+    data = await req.json()
+    target_tag = data.get("tag", "").strip()
+    tier_target = str(data.get("tier", "master")).lower()
+
+    if not target_tag:
+        return {"status": "error", "message": "Missing tag"}
+
+    updated_player_obj = None
+
+    def undo_in_list(list_data):
+        nonlocal updated_player_obj
+        for p in list_data:
+            if p["tag"].lower() == target_tag.lower():
+                current_wins = int(p.get("wins", "0")) - 1
+                p["wins"] = str(max(0, current_wins))
+                p["points"] = "0"
+                w = int(p["wins"])
+                if w >= 151: p["rank"] = "Platinum"
+                elif w >= 101: p["rank"] = "Gold"
+                elif w >= 51: p["rank"] = "Silver"
+                elif w >= 1: p["rank"] = "Bronze"
+                else: p["rank"] = "-"
+                updated_player_obj = p
+                break
+        return list_data
+
+    if tier_target == "daily":
+        state["standings_daily"] = undo_in_list(state["standings_daily"])
+        save_json_file(DAILY_FILE, state["standings_daily"])
+    elif tier_target == "weekly":
+        state["standings_weekly"] = undo_in_list(state["standings_weekly"])
+        save_json_file(WEEKLY_FILE, state["standings_weekly"])
+    elif tier_target == "monthly":
+        state["standings_monthly"] = undo_in_list(state["standings_monthly"])
+        save_json_file(MONTHLY_FILE, state["standings_monthly"])
+    elif tier_target == "yearly":
+        state["standings_yearly"] = undo_in_list(state["standings_yearly"])
+        save_json_file(YEARLY_FILE, state["standings_yearly"])
+    else:
+        tier_target = "master"
+        state["standings_master"] = undo_in_list(state["standings_master"])
+        state["standings"] = state["standings_master"]
+        save_json_file(MASTER_FILE, state["standings_master"])
+
+    if updated_player_obj:
+        post_to_google_sheets({
+            "action": "update",
+            "tier": tier_target,
+            "tag": updated_player_obj.get("tag"),
+            "platform": updated_player_obj.get("platform", "Twitch"),
+            "wins": int(updated_player_obj.get("wins", 0))
+        })
+
+    payload_full = {
+        "daily": state["standings_daily"],
+        "weekly": state["standings_weekly"],
+        "monthly": state["standings_monthly"],
+        "yearly": state["standings_yearly"],
+        "master": state["standings_master"]
+    }
+    await manager.broadcast("STANDINGS_UPDATE", payload_full)
+    await manager.broadcast("FULL_STATE", state)
+    return {"status": "success", "standings": payload_full}
+
+@app.post("/api/standings/edit")
+async def edit_player_tag(req: Request):
+    data = await req.json()
+    old_tag = data.get("old_tag", "").strip()
+    new_tag = data.get("new_tag", "").strip()
+    new_platform = data.get("platform", "").strip()
+    tier_target = str(data.get("tier", "master")).lower()
+
+    if not old_tag:
+        return {"status": "error", "message": "Missing tag parameter"}
+    if not new_tag:
+        new_tag = old_tag
+
+    edited_player_obj = None
+
+    def edit_in_list(list_data):
+        nonlocal edited_player_obj
+        for p in list_data:
+            if p["tag"].lower() == old_tag.lower():
+                p["tag"] = new_tag
+                if new_platform in ["Twitch", "TikTok", "YouTube"]:
+                    p["platform"] = new_platform
+                edited_player_obj = p
+                break
+        return list_data
+
+    if tier_target == "daily":
+        state["standings_daily"] = edit_in_list(state["standings_daily"])
+        save_json_file(DAILY_FILE, state["standings_daily"])
+    elif tier_target == "weekly":
+        state["standings_weekly"] = edit_in_list(state["standings_weekly"])
+        save_json_file(WEEKLY_FILE, state["standings_weekly"])
+    elif tier_target == "monthly":
+        state["standings_monthly"] = edit_in_list(state["standings_monthly"])
+        save_json_file(MONTHLY_FILE, state["standings_monthly"])
+    elif tier_target == "yearly":
+        state["standings_yearly"] = edit_in_list(state["standings_yearly"])
+        save_json_file(YEARLY_FILE, state["standings_yearly"])
+    else:
+        tier_target = "master"
+        state["standings_master"] = edit_in_list(state["standings_master"])
+        state["standings"] = state["standings_master"]
+        save_json_file(MASTER_FILE, state["standings_master"])
+
+    if edited_player_obj:
+        post_to_google_sheets({
+            "action": "update",
+            "tier": tier_target,
+            "tag": edited_player_obj.get("tag"),
+            "platform": edited_player_obj.get("platform", "Twitch"),
+            "wins": int(edited_player_obj.get("wins", 0))
+        })
+
+    payload_full = {
+        "daily": state["standings_daily"],
+        "weekly": state["standings_weekly"],
+        "monthly": state["standings_monthly"],
+        "yearly": state["standings_yearly"],
+        "master": state["standings_master"]
+    }
+    await manager.broadcast("STANDINGS_UPDATE", payload_full)
+    await manager.broadcast("FULL_STATE", state)
+    return {"status": "success", "standings": payload_full}
+
+@app.post("/api/standings/delete")
+async def delete_player_tag(req: Request):
+    data = await req.json()
+    tag = data.get("tag", "").strip()
+    tier_target = str(data.get("tier", "master")).lower()
+
+    if not tag:
+        return {"status": "error", "message": "Missing tag parameter"}
+
+    if tier_target == "daily":
+        state["standings_daily"] = [p for p in state["standings_daily"] if p["tag"].lower() != tag.lower()]
+        save_json_file(DAILY_FILE, state["standings_daily"])
+    elif tier_target == "weekly":
+        state["standings_weekly"] = [p for p in state["standings_weekly"] if p["tag"].lower() != tag.lower()]
+        save_json_file(WEEKLY_FILE, state["standings_weekly"])
+    elif tier_target == "monthly":
+        state["standings_monthly"] = [p for p in state["standings_monthly"] if p["tag"].lower() != tag.lower()]
+        save_json_file(MONTHLY_FILE, state["standings_monthly"])
+    elif tier_target == "yearly":
+        state["standings_yearly"] = [p for p in state["standings_yearly"] if p["tag"].lower() != tag.lower()]
+        save_json_file(YEARLY_FILE, state["standings_yearly"])
+    else:
+        tier_target = "master"
+        state["standings_master"] = [p for p in state["standings_master"] if p["tag"].lower() != tag.lower()]
+        state["standings"] = state["standings_master"]
+        save_json_file(MASTER_FILE, state["standings_master"])
+
+    post_to_google_sheets({
+        "action": "delete",
+        "tier": tier_target,
+        "tag": tag
+    })
+
+    payload_full = {
+        "daily": state["standings_daily"],
+        "weekly": state["standings_weekly"],
+        "monthly": state["standings_monthly"],
+        "yearly": state["standings_yearly"],
+        "master": state["standings_master"]
+    }
+    await manager.broadcast("STANDINGS_UPDATE", payload_full)
+    await manager.broadcast("FULL_STATE", state)
+    return {"status": "success", "standings": payload_full}
+
+@app.post("/api/standings/reset")
+async def reset_standings(req: Request = None):
+    scope = "daily"
+    try:
+        if req:
+            body = await req.json()
+            scope = str(body.get("scope", "daily")).lower()
+    except Exception:
+        pass
+
+    def zero_out_list(list_data):
+        for player in list_data:
+            player["wins"] = "0"
+            player["points"] = "0"
+            player["rank"] = "-"
+        return list_data
+
+    if scope == "all":
+        state["standings_daily"] = zero_out_list(state["standings_daily"])
+        state["standings_weekly"] = zero_out_list(state["standings_weekly"])
+        state["standings_monthly"] = zero_out_list(state["standings_monthly"])
+        state["standings_yearly"] = zero_out_list(state["standings_yearly"])
+        state["standings_master"] = zero_out_list(state["standings_master"])
+        state["standings"] = state["standings_master"]
+        
+        save_json_file(DAILY_FILE, state["standings_daily"])
+        save_json_file(WEEKLY_FILE, state["standings_weekly"])
+        save_json_file(MONTHLY_FILE, state["standings_monthly"])
+        save_json_file(YEARLY_FILE, state["standings_yearly"])
+        save_json_file(MASTER_FILE, state["standings_master"])
+
+        for t in ["daily", "weekly", "monthly", "yearly", "master"]:
+            post_to_google_sheets({"action": "reset", "tier": t})
+    else:
+        if scope == "daily":
+            zero_out_list(state["standings_daily"])
+            save_json_file(DAILY_FILE, state["standings_daily"])
+        elif scope == "weekly":
+            zero_out_list(state["standings_weekly"])
+            save_json_file(WEEKLY_FILE, state["standings_weekly"])
+        elif scope == "monthly":
+            zero_out_list(state["standings_monthly"])
+            save_json_file(MONTHLY_FILE, state["standings_monthly"])
+        elif scope == "yearly":
+            zero_out_list(state["standings_yearly"])
+            save_json_file(YEARLY_FILE, state["standings_yearly"])
+        else:
+            scope = "master"
+            zero_out_list(state["standings_master"])
+            state["standings"] = state["standings_master"]
+            save_json_file(MASTER_FILE, state["standings_master"])
+
+        post_to_google_sheets({"action": "reset", "tier": scope})
+
+    payload_full = {
+        "daily": state["standings_daily"],
+        "weekly": state["standings_weekly"],
+        "monthly": state["standings_monthly"],
+        "yearly": state["standings_yearly"],
+        "master": state["standings_master"]
+    }
+    await manager.broadcast("STANDINGS_UPDATE", payload_full)
+    await manager.broadcast("FULL_STATE", state)
+    return {"status": "success", "scope": scope, "standings": payload_full}
+
+@app.get("/api/banner")
+async def get_banner():
+    return state["banner"]
+
+@app.post("/api/banner")
+async def post_banner(req: Request):
+    data = await req.json()
+    state["banner"].update(data)
+    await manager.broadcast("BANNER_UPDATE", state["banner"])
+    await manager.broadcast("FULL_STATE", state)
+    return state["banner"]
+
+@app.get("/api/cocommentator")
+async def get_cocommentator():
+    return state["cocommentator"]
+
+@app.post("/api/cocommentator")
+async def post_cocommentator(req: Request):
+    data = await req.json()
+    state["cocommentator"].update(data)
+    await manager.broadcast("COMMENTATOR_UPDATE", state["cocommentator"])
+    await manager.broadcast("FULL_STATE", state)
+    return state["cocommentator"]
+
+@app.get("/api/charity")
+async def get_charity():
+    return state["charity"]
+
+@app.post("/api/charity")
+async def post_charity(req: Request):
+    data = await req.json()
+    if "raised" in data:
+        try:
+            state["charity"]["raised"] = float(data["raised"])
+        except (ValueError, TypeError):
+            pass
+    if "goal" in data:
+        try:
+            state["charity"]["goal"] = float(data["goal"])
+        except (ValueError, TypeError):
+            pass
+
+    await manager.broadcast("CHARITY_UPDATE", state["charity"])
+    await manager.broadcast("FULL_STATE", state)
+    return state["charity"]
+
+@app.get("/standings.html")
+async def serve_standings():
+    file_path = os.path.join(SCRIPT_DIR, "standings.html")
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    return {"error": "standings.html file not found"}
+
+@app.get("/goombaa_charity_progress.html")
+async def serve_charity_overlay():
+    file_path = os.path.join(SCRIPT_DIR, "goombaa_charity_progress.html")
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    return {"error": "goombaa_charity_progress.html file not found"}
+
+@app.get("/overlay_horizontal.html")
+async def serve_horizontal_overlay():
+    file_path = os.path.join(SCRIPT_DIR, "overlay_horizontal.html")
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    return {"error": "overlay_horizontal.html file not found"}
+
+@app.get("/overlay_horizontal_v2.html")
+async def serve_horizontal_overlay_v2():
+    file_path = os.path.join(SCRIPT_DIR, "overlay_horizontal_v2.html")
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    return {"error": "overlay_horizontal_v2.html file not found"}
+
+@app.get("/dock_charity.html")
+async def serve_dock_charity():
+    file_path = os.path.join(SCRIPT_DIR, "dock_charity.html")
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    return {"error": "dock_charity.html file not found"}
+
+@app.get("/dock_match.html")
+async def serve_dock_match():
+    file_path = os.path.join(SCRIPT_DIR, "dock_match.html")
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    return {"app": "dock_match.html file not found"}
+
+@app.get("/dock_broadcast.html")
+async def serve_dock_broadcast():
+    file_path = os.path.join(SCRIPT_DIR, "dock_broadcast.html")
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    return {"error": "dock_broadcast.html file not found"}
+
+app.mount("/", StaticFiles(directory=SCRIPT_DIR, html=True), name="static")
+
+if __name__ == "__main__":
+    print("[Goombaa Control Center] Running on http://0.0.0.0:8000")
+    uvicorn.run(app, host="0.0.0.0", port=8000)
