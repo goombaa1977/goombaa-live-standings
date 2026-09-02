@@ -104,20 +104,64 @@ initial_yearly = load_json_file(YEARLY_FILE, list(DEFAULT_STANDINGS))
 initial_master = load_json_file(MASTER_FILE, list(DEFAULT_STANDINGS))
 initial_queue = load_json_file(QUEUE_FILE, [])
 
-# Safe Weekly Auto-Check on Startup
-try:
-    current_year, current_week, _ = datetime.now().isocalendar()
+# Automatic Periodical Resets Check Logic
+def check_and_perform_automatic_resets():
+    global initial_daily, initial_weekly, initial_monthly, initial_yearly
+    now = datetime.now()
+    current_date_str = now.strftime("%Y-%m-%d")
+    current_year, current_week, _ = now.isocalendar()
+    current_month = now.strftime("%Y-%m")
+    current_year_str = str(now.year)
+
     metadata = load_json_file(META_FILE, {})
-    last_week = metadata.get("last_weekly_reset_week")
     
-    if last_week != current_week:
-        initial_weekly = zero_out_wins_preserve_names(initial_weekly)
-        save_json_file(WEEKLY_FILE, initial_weekly)
+    saved_date = metadata.get("last_date")
+    saved_week = metadata.get("last_weekly_reset_week")
+    saved_month = metadata.get("last_month")
+    saved_year = metadata.get("last_year")
+
+    updated = False
+
+    # 1. Daily Reset Check
+    if saved_date != current_date_str:
+        state["standings_daily"] = zero_out_wins_preserve_names(state["standings_daily"])
+        save_json_file(DAILY_FILE, state["standings_daily"])
+        metadata["last_date"] = current_date_str
+        updated = True
+        print(f"[Goombaa Auto-Reset] New day detected ({current_date_str}). Daily standings reset.")
+
+    # 2. Weekly Reset Check
+    if saved_week != current_week:
+        state["standings_weekly"] = zero_out_wins_preserve_names(state["standings_weekly"])
+        save_json_file(WEEKLY_FILE, state["standings_weekly"])
         metadata["last_weekly_reset_week"] = current_week
+        updated = True
+        print(f"[Goombaa Auto-Reset] New week detected ({current_week}). Weekly standings reset.")
+
+    # 3. Monthly Reset Check
+    if saved_month != current_month:
+        state["standings_monthly"] = zero_out_wins_preserve_names(state["standings_monthly"])
+        save_json_file(MONTHLY_FILE, state["standings_monthly"])
+        metadata["last_month"] = current_month
+        updated = True
+        print(f"[Goombaa Auto-Reset] New month detected ({current_month}). Monthly standings reset.")
+
+    # 4. Yearly Reset Check
+    if saved_year != current_year_str:
+        state["standings_yearly"] = zero_out_wins_preserve_names(state["standings_yearly"])
+        save_json_file(YEARLY_FILE, state["standings_yearly"])
+        metadata["last_year"] = current_year_str
+        updated = True
+        print(f"[Goombaa Auto-Reset] New year detected ({current_year_str}). Yearly standings reset.")
+
+    if updated:
         save_json_file(META_FILE, metadata)
-        print(f"[Goombaa Control Center] New week detected ({current_week}). Weekly standings safely reset.")
+
+# Run initial automatic checks on startup
+try:
+    check_and_perform_automatic_resets()
 except Exception as e:
-    print(f"Error checking weekly reset: {e}")
+    print(f"Error checking automatic time resets: {e}")
 
 state: Dict[str, Any] = {
     "match": {
@@ -261,6 +305,7 @@ async def next_match(req: Request = None):
 
 @app.get("/api/standings")
 async def get_standings():
+    check_and_perform_automatic_resets()
     try:
         def fetch_google():
             req = urllib.request.Request(GOOGLE_SHEET_WEB_APP_URL, headers={'User-Agent': 'Mozilla/5.0'})
@@ -333,6 +378,7 @@ def update_wins_in_list(list_data: List[Dict[str, Any]], tag: str, amount: int) 
 
 @app.post("/api/win")
 async def add_win(req: Request):
+    check_and_perform_automatic_resets()
     data = await req.json()
     tag = data.get("tag", "").strip()
     amount = int(data.get("amount", 1))
@@ -438,6 +484,7 @@ async def add_win(req: Request):
 
 @app.post("/api/win/undo")
 async def undo_win(req: Request):
+    check_and_perform_automatic_resets()
     data = await req.json()
     target_tag = data.get("tag", "").strip()
     tier_target = str(data.get("tier", "master")).lower()
@@ -754,7 +801,7 @@ async def serve_dock_charity():
     file_path = os.path.join(SCRIPT_DIR, "dock_charity.html")
     if os.path.exists(file_path):
         return FileResponse(file_path)
-    return {"error": "dock_charity.html file not length"}
+    return {"error": "dock_charity.html file not found"}
 
 @app.get("/dock_match.html")
 async def serve_dock_match():
