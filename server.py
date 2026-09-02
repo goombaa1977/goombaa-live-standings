@@ -379,7 +379,7 @@ async def add_win(req: Request):
 
     asyncio.create_task(background_sync_sheets())
 
-    # --- PROTECTED KOTH ROTATION LOGIC ---
+    # --- PROTECTED KOTH ROTATION LOGIC (FIXED) ---
     if auto_add:
         p1_current = str(state["match"].get("p1") or state["match"].get("player1") or "").strip()
         p2_current = str(state["match"].get("p2") or state["match"].get("player2") or "").strip()
@@ -389,39 +389,38 @@ async def add_win(req: Request):
             state["match"]["p2"] = p2_current
             state["match"]["player2"] = p2_current
 
-        if tag.lower() == p2_current.lower():
-            loser = p1_current
-            state["match"]["p1"] = p2_current
-            state["match"]["player1"] = p2_current
+        # Only execute rotation if there are actually players waiting in the queue
+        if len(state["queue"]) > 0:
+            if tag.lower() == p2_current.lower():
+                loser = p1_current
+                state["match"]["p1"] = p2_current
+                state["match"]["player1"] = p2_current
 
-            if len(state["queue"]) > 0:
                 next_challenger = state["queue"].pop(0)
                 state["match"]["p2"] = next_challenger
                 state["match"]["player2"] = next_challenger
-            else:
-                state["match"]["p2"] = "Player 2"
-                state["match"]["player2"] = "Player 2"
 
-            if loser and loser not in ["Player 1", "Player 2", ""] and loser not in state["queue"]:
-                state["queue"].append(loser)
+                if loser and loser not in ["Player 1", "Player 2", ""] and loser not in state["queue"]:
+                    state["queue"].append(loser)
 
-            save_json_file(QUEUE_FILE, state["queue"])
+            elif tag.lower() == p1_current.lower():
+                loser = p2_current
 
-        elif tag.lower() == p1_current.lower():
-            loser = p2_current
-
-            if len(state["queue"]) > 0:
                 next_challenger = state["queue"].pop(0)
                 state["match"]["p2"] = next_challenger
                 state["match"]["player2"] = next_challenger
-            else:
-                state["match"]["p2"] = "Player 2"
-                state["match"]["player2"] = "Player 2"
 
-            if loser and loser not in ["Player 1", "Player 2", ""] and loser not in state["queue"]:
-                state["queue"].append(loser)
+                if loser and loser not in ["Player 1", "Player 2", ""] and loser not in state["queue"]:
+                    state["queue"].append(loser)
 
             save_json_file(QUEUE_FILE, state["queue"])
+        else:
+            # Strict 2-Player Mode (Empty Queue): Never push a loser to the queue. Just swap active slots if P2 wins.
+            if tag.lower() == p2_current.lower():
+                state["match"]["p1"] = p2_current
+                state["match"]["player1"] = p2_current
+                state["match"]["p2"] = p1_current
+                state["match"]["player2"] = p1_current
     # --- END OF PROTECTED KOTH ROTATION LOGIC ---
 
     payload_full = {
@@ -755,7 +754,7 @@ async def serve_dock_charity():
     file_path = os.path.join(SCRIPT_DIR, "dock_charity.html")
     if os.path.exists(file_path):
         return FileResponse(file_path)
-    return {"error": "dock_charity.html file not found"}
+    return {"error": "dock_charity.html file not length"}
 
 @app.get("/dock_match.html")
 async def serve_dock_match():
