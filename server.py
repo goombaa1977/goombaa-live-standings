@@ -241,6 +241,7 @@
 </head>
 <body>
 
+    <!-- TOP CONTROL BUTTON GROUP (Reset, Edit, Delete) -->
     <div class="card">
         <div class="top-button-group">
             <button class="btn-third btn-reset-third" onclick="openResetModal()">⚠️ RESET</button>
@@ -249,6 +250,7 @@
         </div>
     </div>
 
+    <!-- ACTIVE MATCH CARD -->
     <div class="card">
         <h2>Active Match (KotH)</h2>
 
@@ -279,6 +281,7 @@
         </div>
     </div>
 
+    <!-- QUEUE MANAGER CARD -->
     <div class="card">
         <h2>Queue Manager</h2>
 
@@ -293,6 +296,7 @@
         <button class="btn-red" style="margin-top: 4px;" onclick="clearQueue()">Clear Queue</button>
     </div>
 
+    <!-- Reset Standings Modal Popup -->
     <div id="resetModal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-title">Reset Standings</div>
@@ -307,6 +311,7 @@
         </div>
     </div>
 
+    <!-- Edit Player Modal Popup -->
     <div id="editModal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-title" style="color: var(--accent-orange);">Edit Player Tag & Platform</div>
@@ -333,6 +338,7 @@
         </div>
     </div>
 
+    <!-- Delete Player Modal Popup -->
     <div id="deleteModal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-title" style="color: var(--accent-red);">Delete Player from Standings</div>
@@ -542,55 +548,40 @@
             await syncQueue();
         }
 
-        /* Strictly Local-Only 2-Player KotH Guard */
+        /* Original Working handleWinAndAdvance Logic */
         async function handleWinAndAdvance(winnerSlot) {
             const winnerTag = winnerSlot === 'p1' ? p1Input.value.trim() : p2Input.value.trim();
             if (!winnerTag || winnerTag === "Player 1" || winnerTag === "Player 2") return;
 
-            const p1Val = p1Input.value.trim();
-            const p2Val = p2Input.value.trim();
+            // 1. Record win on the backend and update Google Sheets / standings
+            await fetch(`${API_BASE}/win`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ tag: winnerTag, amount: 1, auto_add: true })
+            });
 
+            // 2. Perform local KOTH queue rotation
             if (localQueue.length > 0) {
-                // Normal Queue Rotation
-                await fetch(`${API_BASE}/win`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ tag: winnerTag, amount: 1, auto_add: true })
-                });
-
                 const nextChallenger = localQueue.shift();
                 let losingPlayer = "";
 
                 if (winnerSlot === 'p1') {
-                    losingPlayer = p2Val;
+                    losingPlayer = p2Input.value.trim();
                     p2Input.value = nextChallenger;
                 } else {
-                    losingPlayer = p1Val;
-                    p1Input.value = p2Val;
+                    losingPlayer = p1Input.value.trim();
+                    p1Input.value = p2Input.value.trim();
                     p2Input.value = nextChallenger;
                 }
-                
+
                 if (losingPlayer && losingPlayer !== "Player 1" && losingPlayer !== "Player 2" && !localQueue.includes(losingPlayer)) {
                     localQueue.push(losingPlayer);
                 }
-            } else {
-                // Strict 2-Player Mode: Queue is empty, so we prevent any auto-adding behavior on the backend call
-                await fetch(`${API_BASE}/win`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ tag: winnerTag, amount: 1, auto_add: false })
-                });
 
-                // Simply swap them visually on the control panel if Player 2 won, keeping localQueue completely empty [ ]
-                if (winnerSlot === 'p2') {
-                    p1Input.value = p2Val;
-                    p2Input.value = p1Val;
-                }
+                renderQueueUI(localQueue);
+                await updateActiveMatch();
+                await syncQueue();
             }
-
-            renderQueueUI(localQueue);
-            await updateActiveMatch();
-            await syncQueue();
         }
 
         async function undoActiveWin() {
@@ -716,7 +707,7 @@
                 try {
                     await fetch(`${API_BASE}/standings/reset`, {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
+                    headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({ scope: scope })
                     });
                     alert(`Successfully reset ${scope} standings.`);
@@ -768,7 +759,6 @@
         function openDeleteModal() {
             document.getElementById('deleteTagInput').value = "";
             document.getElementById('deleteModal').style.display = 'flex';
-            document.getElementById('deleteTagInput').value = "";
             document.getElementById('deleteTagInput').focus();
         }
 
