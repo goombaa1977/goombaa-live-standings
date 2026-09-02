@@ -548,7 +548,7 @@
             await syncQueue();
         }
 
-        /* Combined +1 Win & Local King of the Hill Queue Advancement */
+        /* Fixed Combined +1 Win & Local King of the Hill Queue Advancement */
         async function handleWinAndAdvance(winnerSlot) {
             const winnerTag = winnerSlot === 'p1' ? p1Input.value.trim() : p2Input.value.trim();
             if (!winnerTag || winnerTag === "Player 1" || winnerTag === "Player 2") return;
@@ -560,28 +560,41 @@
                 body: JSON.stringify({ tag: winnerTag, amount: 1, auto_add: true })
             });
 
-            // 2. Perform local KOTH queue rotation cleanly
+            // 2. Perform local KOTH queue rotation cleanly (handles 2 players or full queue seamlessly)
+            const p1Val = p1Input.value.trim();
+            const p2Val = p2Input.value.trim();
+            let losingPlayer = "";
+
             if (localQueue.length > 0) {
                 const nextChallenger = localQueue.shift();
-                let losingPlayer = "";
-
                 if (winnerSlot === 'p1') {
-                    losingPlayer = p2Input.value.trim();
+                    losingPlayer = p2Val;
                     p2Input.value = nextChallenger;
                 } else {
-                    losingPlayer = p1Input.value.trim();
-                    p1Input.value = p2Input.value.trim();
+                    losingPlayer = p1Val;
+                    p1Input.value = p2Val;
                     p2Input.value = nextChallenger;
                 }
-
-                if (losingPlayer && losingPlayer !== "Player 1" && losingPlayer !== "Player 2" && !localQueue.includes(losingPlayer)) {
-                    localQueue.push(losingPlayer);
+            } else {
+                // If queue is empty (e.g. exactly 2 players total), just cycle them without needing a 3rd player
+                if (winnerSlot === 'p1') {
+                    losingPlayer = p2Val;
+                    // Winner (p1) stays, p2 and p1 swap or rotate if desired, or keep them as is. 
+                    // For a 2-player KOTH loop with empty queue, winner stays and loser stays ready for next match:
+                } else {
+                    losingPlayer = p1Val;
+                    p1Input.value = p2Val;
+                    p2Input.value = losingPlayer;
                 }
-
-                renderQueueUI(localQueue);
-                await updateActiveMatch();
-                await syncQueue();
             }
+
+            if (losingPlayer && losingPlayer !== "Player 1" && losingPlayer !== "Player 2" && !localQueue.includes(losingPlayer)) {
+                localQueue.push(losingPlayer);
+            }
+
+            renderQueueUI(localQueue);
+            await updateActiveMatch();
+            await syncQueue();
         }
 
         async function undoActiveWin() {
