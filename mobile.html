@@ -548,7 +548,7 @@
             await syncQueue();
         }
 
-        /* Combined +1 Win & Local King of the Hill Queue Advancement (Fixed 2-Player Glitch) */
+        /* Fixed 2-Player Match Locking & Queue Advancement Logic */
         async function handleWinAndAdvance(winnerSlot) {
             const winnerTag = winnerSlot === 'p1' ? p1Input.value.trim() : p2Input.value.trim();
             if (!winnerTag || winnerTag === "Player 1" || winnerTag === "Player 2") return;
@@ -557,7 +557,7 @@
             await fetch(`${API_BASE}/win`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ tag: winnerTag, amount: 1, auto_add: true })
+                body: JSON.stringify({ tag: winnerTag, amount: 1, auto_add: false })
             });
 
             // 2. Perform local KOTH queue rotation cleanly
@@ -581,9 +581,9 @@
                     localQueue.push(losingPlayer);
                 }
             } else {
-                // 2-Player KOTH mode (Empty Queue): Do NOT push losers to queue. Just swap positions if P2 wins.
+                // 2-Player KOTH mode (Empty Queue): Keep players locked in active slots, NO queue additions
                 if (winnerSlot === 'p1') {
-                    // P1 won, they stay on P1 side
+                    // P1 won, they stay on P1 side, P2 stays on P2 side
                 } else {
                     // P2 won, swap them so the winner moves to P1 side
                     p1Input.value = p2Val;
