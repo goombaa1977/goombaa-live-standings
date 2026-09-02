@@ -548,7 +548,7 @@
             await syncQueue();
         }
 
-        /* Fixed Combined +1 Win & Local King of the Hill Queue Advancement */
+        /* Fixed 2-Player & Queue KOTH Advancement Logic */
         async function handleWinAndAdvance(winnerSlot) {
             const winnerTag = winnerSlot === 'p1' ? p1Input.value.trim() : p2Input.value.trim();
             if (!winnerTag || winnerTag === "Player 1" || winnerTag === "Player 2") return;
@@ -560,7 +560,7 @@
                 body: JSON.stringify({ tag: winnerTag, amount: 1, auto_add: true })
             });
 
-            // 2. Perform local KOTH queue rotation cleanly (handles 2 players or full queue seamlessly)
+            // 2. Perform local KOTH queue rotation cleanly
             const p1Val = p1Input.value.trim();
             const p2Val = p2Input.value.trim();
             let losingPlayer = "";
@@ -575,21 +575,19 @@
                     p1Input.value = p2Val;
                     p2Input.value = nextChallenger;
                 }
-            } else {
-                // If queue is empty (e.g. exactly 2 players total), just cycle them without needing a 3rd player
-                if (winnerSlot === 'p1') {
-                    losingPlayer = p2Val;
-                    // Winner (p1) stays, p2 and p1 swap or rotate if desired, or keep them as is. 
-                    // For a 2-player KOTH loop with empty queue, winner stays and loser stays ready for next match:
-                } else {
-                    losingPlayer = p1Val;
-                    p1Input.value = p2Val;
-                    p2Input.value = losingPlayer;
+                
+                if (losingPlayer && losingPlayer !== "Player 1" && losingPlayer !== "Player 2" && !localQueue.includes(losingPlayer)) {
+                    localQueue.push(losingPlayer);
                 }
-            }
-
-            if (losingPlayer && losingPlayer !== "Player 1" && losingPlayer !== "Player 2" && !localQueue.includes(losingPlayer)) {
-                localQueue.push(losingPlayer);
+            } else {
+                // 2-Player KOTH mode (Empty Queue): Keep existing 2 players active without adding queue entries
+                if (winnerSlot === 'p1') {
+                    // P1 won, both stay in place ready for next match
+                } else {
+                    // P2 won, swap them so winner is on P1 side and loser is on P2 side
+                    p1Input.value = p2Val;
+                    p2Input.value = p1Val;
+                }
             }
 
             renderQueueUI(localQueue);
