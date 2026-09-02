@@ -548,7 +548,7 @@
             await syncQueue();
         }
 
-        /* Fixed 2-Player & Queue KOTH Advancement Logic */
+        /* Combined +1 Win & Local King of the Hill Queue Advancement (Fixed 2-Player Glitch) */
         async function handleWinAndAdvance(winnerSlot) {
             const winnerTag = winnerSlot === 'p1' ? p1Input.value.trim() : p2Input.value.trim();
             if (!winnerTag || winnerTag === "Player 1" || winnerTag === "Player 2") return;
@@ -563,10 +563,11 @@
             // 2. Perform local KOTH queue rotation cleanly
             const p1Val = p1Input.value.trim();
             const p2Val = p2Input.value.trim();
-            let losingPlayer = "";
 
             if (localQueue.length > 0) {
                 const nextChallenger = localQueue.shift();
+                let losingPlayer = "";
+
                 if (winnerSlot === 'p1') {
                     losingPlayer = p2Val;
                     p2Input.value = nextChallenger;
@@ -580,11 +581,11 @@
                     localQueue.push(losingPlayer);
                 }
             } else {
-                // 2-Player KOTH mode (Empty Queue): Keep existing 2 players active without adding queue entries
+                // 2-Player KOTH mode (Empty Queue): Do NOT push losers to queue. Just swap positions if P2 wins.
                 if (winnerSlot === 'p1') {
-                    // P1 won, both stay in place ready for next match
+                    // P1 won, they stay on P1 side
                 } else {
-                    // P2 won, swap them so winner is on P1 side and loser is on P2 side
+                    // P2 won, swap them so the winner moves to P1 side
                     p1Input.value = p2Val;
                     p2Input.value = p1Val;
                 }
