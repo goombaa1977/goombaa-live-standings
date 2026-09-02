@@ -2,7 +2,8 @@
 Goombaa Control Center - Backend Web Server
 File: server.py
 Description: Full FastAPI backend with centralized backend KOTH slot rotation for both Player 1 and Player 2,
-independent multi-tier win cascading (including Yearly), and synchronized non-blocking Google Sheets background sync.
+independent multi-tier win cascading (including Yearly), synchronized non-blocking Google Sheets background sync,
+and automated time-based periodic resets for weekly, monthly, and yearly standings (daily remains manual).
 """
 
 import os
@@ -104,33 +105,23 @@ initial_yearly = load_json_file(YEARLY_FILE, list(DEFAULT_STANDINGS))
 initial_master = load_json_file(MASTER_FILE, list(DEFAULT_STANDINGS))
 initial_queue = load_json_file(QUEUE_FILE, [])
 
-# Automatic Periodical Resets Check Logic
+# Automatic Periodical Resets Check Logic (Weekly, Monthly, Yearly only)
 def check_and_perform_automatic_resets():
-    global initial_daily, initial_weekly, initial_monthly, initial_yearly
+    global initial_weekly, initial_monthly, initial_yearly
     now = datetime.now()
-    current_date_str = now.strftime("%Y-%m-%d")
     current_year, current_week, _ = now.isocalendar()
     current_month = now.strftime("%Y-%m")
     current_year_str = str(now.year)
 
     metadata = load_json_file(META_FILE, {})
     
-    saved_date = metadata.get("last_date")
     saved_week = metadata.get("last_weekly_reset_week")
     saved_month = metadata.get("last_month")
     saved_year = metadata.get("last_year")
 
     updated = False
 
-    # 1. Daily Reset Check
-    if saved_date != current_date_str:
-        state["standings_daily"] = zero_out_wins_preserve_names(state["standings_daily"])
-        save_json_file(DAILY_FILE, state["standings_daily"])
-        metadata["last_date"] = current_date_str
-        updated = True
-        print(f"[Goombaa Auto-Reset] New day detected ({current_date_str}). Daily standings reset.")
-
-    # 2. Weekly Reset Check
+    # 1. Weekly Reset Check
     if saved_week != current_week:
         state["standings_weekly"] = zero_out_wins_preserve_names(state["standings_weekly"])
         save_json_file(WEEKLY_FILE, state["standings_weekly"])
@@ -138,7 +129,7 @@ def check_and_perform_automatic_resets():
         updated = True
         print(f"[Goombaa Auto-Reset] New week detected ({current_week}). Weekly standings reset.")
 
-    # 3. Monthly Reset Check
+    # 2. Monthly Reset Check
     if saved_month != current_month:
         state["standings_monthly"] = zero_out_wins_preserve_names(state["standings_monthly"])
         save_json_file(MONTHLY_FILE, state["standings_monthly"])
@@ -146,7 +137,7 @@ def check_and_perform_automatic_resets():
         updated = True
         print(f"[Goombaa Auto-Reset] New month detected ({current_month}). Monthly standings reset.")
 
-    # 4. Yearly Reset Check
+    # 3. Yearly Reset Check
     if saved_year != current_year_str:
         state["standings_yearly"] = zero_out_wins_preserve_names(state["standings_yearly"])
         save_json_file(YEARLY_FILE, state["standings_yearly"])
@@ -435,7 +426,6 @@ async def add_win(req: Request):
             state["match"]["p2"] = p2_current
             state["match"]["player2"] = p2_current
 
-        # Only execute rotation if there are actually players waiting in the queue
         if len(state["queue"]) > 0:
             if tag.lower() == p2_current.lower():
                 loser = p1_current
@@ -461,7 +451,6 @@ async def add_win(req: Request):
 
             save_json_file(QUEUE_FILE, state["queue"])
         else:
-            # Strict 2-Player Mode (Empty Queue): Never push a loser to the queue. Just swap active slots if P2 wins.
             if tag.lower() == p2_current.lower():
                 state["match"]["p1"] = p2_current
                 state["match"]["player1"] = p2_current
