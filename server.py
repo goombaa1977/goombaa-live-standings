@@ -108,8 +108,10 @@ if isinstance(raw_yearly, list):
 else:
     initial_yearly = raw_yearly
 
-# Force Master to share the exact same reference as Yearly ALL to prevent drift
+# Force Master to initialize from Yearly ALL and overwrite standings.json to fix drift
 initial_master = initial_yearly.setdefault("ALL", load_json_file(MASTER_FILE, list(DEFAULT_STANDINGS)))
+save_json_file(MASTER_FILE, initial_master)
+
 initial_queue = load_json_file(QUEUE_FILE, [])
 
 # Automatic Periodical Resets Check Logic (Weekly, Monthly, Yearly with Archive Snapshots)
