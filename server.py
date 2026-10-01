@@ -53,7 +53,7 @@ def load_json_file(filepath: str, fallback_data: Any) -> Any:
         try:
             with open(filepath, "r") as f:
                 data = json.load(f)
-                if data:
+                if data and data != []:
                     return data
         except Exception:
             pass
@@ -108,7 +108,6 @@ if isinstance(raw_yearly, list):
 else:
     initial_yearly = raw_yearly
 
-# Keep Master independent using its own MASTER_FILE storage for lifetime records
 initial_master = load_json_file(MASTER_FILE, list(DEFAULT_STANDINGS))
 initial_queue = load_json_file(QUEUE_FILE, [])
 
@@ -158,7 +157,7 @@ def check_and_perform_automatic_resets():
         updated = True
         print(f"[Goombaa Auto-Reset] New month detected ({current_month}). Monthly standings reset.")
 
-    # 3. Yearly Reset Check (Only resets the yearly tracking, Master stays lifetime)
+    # 3. Yearly Reset Check
     if saved_year != current_year_str:
         if not isinstance(state["standings_yearly"], dict):
             state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
@@ -171,7 +170,6 @@ def check_and_perform_automatic_resets():
     if updated:
         save_json_file(META_FILE, metadata)
 
-# Run initial automatic checks on startup
 try:
     check_and_perform_automatic_resets()
 except Exception as e:
@@ -353,34 +351,38 @@ async def get_standings():
 
         data = await asyncio.to_thread(fetch_google)
         
-        if data and ("daily" in data or "master" in data):
+        # Only accept Google Sheet data if it actually contains valid player lists, preventing blank wipes
+        if data and isinstance(data, dict) and (len(data.get("daily", [])) > 0 or len(data.get("master", [])) > 0):
             for tier_key in ["daily", "weekly", "monthly", "yearly", "master"]:
-                if tier_key in data:
+                if tier_key in data and isinstance(data[tier_key], list) and len(data[tier_key]) > 0:
                     for p in data[tier_key]:
                         p["wins"] = str(p.get("wins", "0"))
                         p["points"] = "0"
             
-            state["standings_daily"] = data.get("daily", state["standings_daily"])
-            state["standings_weekly"] = data.get("weekly", state["standings_weekly"])
-            state["standings_monthly"] = data.get("monthly", state["standings_monthly"])
+            if len(data.get("daily", [])) > 0:
+                state["standings_daily"] = data.get("daily")
+                save_json_file(DAILY_FILE, state["standings_daily"])
+            if len(data.get("weekly", [])) > 0:
+                state["standings_weekly"] = data.get("weekly")
+                save_json_file(WEEKLY_FILE, state["standings_weekly"])
+            if len(data.get("monthly", [])) > 0:
+                state["standings_monthly"] = data.get("monthly")
+                save_json_file(MONTHLY_FILE, state["standings_monthly"])
+            
             if "yearly" in data:
-                if isinstance(data["yearly"], dict):
+                if isinstance(data["yearly"], dict) and len(data["yearly"]) > 0:
                     state["standings_yearly"] = data["yearly"]
-                else:
+                elif isinstance(data["yearly"], list) and len(data["yearly"]) > 0:
                     if not isinstance(state["standings_yearly"], dict):
                         state["standings_yearly"] = {}
                     state["standings_yearly"]["ALL"] = data["yearly"]
+                save_json_file(YEARLY_FILE, state["standings_yearly"])
             
-            if "master" in data:
+            if "master" in data and isinstance(data["master"], list) and len(data["master"]) > 0:
                 state["standings_master"] = data["master"]
+                save_json_file(MASTER_FILE, state["standings_master"])
             
             state["standings"] = state["standings_master"]
-            
-            save_json_file(DAILY_FILE, state["standings_daily"])
-            save_json_file(WEEKLY_FILE, state["standings_weekly"])
-            save_json_file(MONTHLY_FILE, state["standings_monthly"])
-            save_json_file(YEARLY_FILE, state["standings_yearly"])
-            save_json_file(MASTER_FILE, state["standings_master"])
     except Exception as e:
         print(f"Notice: Google Sheets fetch skipped/timed out, serving local cache: {e}")
 
@@ -444,7 +446,6 @@ async def add_win(req: Request):
     state["standings_yearly"]["ALL"], updated_p_yearly = update_wins_in_list(yearly_all_list, tag, amount)
     save_json_file(YEARLY_FILE, state["standings_yearly"])
 
-    # Master updates independently for all-time tracking
     state["standings_master"], updated_p_master = update_wins_in_list(state["standings_master"], tag, amount)
     state["standings"] = state["standings_master"]
     save_json_file(MASTER_FILE, state["standings_master"])
