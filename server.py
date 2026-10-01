@@ -111,7 +111,6 @@ else:
 initial_master = load_json_file(MASTER_FILE, list(DEFAULT_STANDINGS))
 initial_queue = load_json_file(QUEUE_FILE, [])
 
-# Automatic Periodical Resets Check Logic (Weekly, Monthly, Yearly with Archive Snapshots)
 def check_and_perform_automatic_resets():
     global initial_weekly, initial_monthly, initial_yearly, initial_master
     now = datetime.now()
@@ -127,19 +126,16 @@ def check_and_perform_automatic_resets():
 
     updated = False
 
-    # 1. Weekly Reset Check
     if saved_week != current_week:
         state["standings_weekly"] = zero_out_wins_preserve_names(state["standings_weekly"])
         save_json_file(WEEKLY_FILE, state["standings_weekly"])
         metadata["last_weekly_reset_week"] = current_week
         updated = True
-        print(f"[Goombaa Auto-Reset] New week detected ({current_week}). Weekly standings reset.")
 
-    # 2. Monthly Reset Check & Archival
     if saved_month != current_month:
         if saved_month:
             if not isinstance(state["standings_yearly"], dict):
-                state["standings_yearly"] = {"ALL": state["standings_yearly"] if isinstance(state["standings_yearly"], list) else list(DEFAULT_STANDINGS)}
+                state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
             
             parts = saved_month.split("-")
             if len(parts) == 2:
@@ -147,17 +143,15 @@ def check_and_perform_automatic_resets():
                 m_names = {"01": "JAN", "02": "FEB", "03": "MAR", "04": "APR", "05": "MAY", "06": "JUN", "07": "JUL", "08": "AUG", "09": "SEP", "10": "OCT", "11": "NOV", "12": "DEC"}
                 m_code = m_names.get(m_str, m_str)
                 archive_key = f"yearly_{y_str}_{m_code}"
+                # Snapshot current monthly standings safely before reset
                 state["standings_yearly"][archive_key] = list(state["standings_monthly"])
                 save_json_file(YEARLY_FILE, state["standings_yearly"])
-                print(f"[Goombaa Archive] Archived monthly standings for {saved_month} under {archive_key}.")
 
         state["standings_monthly"] = zero_out_wins_preserve_names(state["standings_monthly"])
         save_json_file(MONTHLY_FILE, state["standings_monthly"])
         metadata["last_month"] = current_month
         updated = True
-        print(f"[Goombaa Auto-Reset] New month detected ({current_month}). Monthly standings reset.")
 
-    # 3. Yearly Reset Check
     if saved_year != current_year_str:
         if not isinstance(state["standings_yearly"], dict):
             state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
@@ -165,7 +159,6 @@ def check_and_perform_automatic_resets():
         save_json_file(YEARLY_FILE, state["standings_yearly"])
         metadata["last_year"] = current_year_str
         updated = True
-        print(f"[Goombaa Auto-Reset] New year detected ({current_year_str}). Yearly standings reset.")
 
     if updated:
         save_json_file(META_FILE, metadata)
@@ -351,7 +344,6 @@ async def get_standings():
 
         data = await asyncio.to_thread(fetch_google)
         
-        # Only accept Google Sheet data if it actually contains valid player lists, preventing blank wipes
         if data and isinstance(data, dict) and (len(data.get("daily", [])) > 0 or len(data.get("master", [])) > 0):
             for tier_key in ["daily", "weekly", "monthly", "yearly", "master"]:
                 if tier_key in data and isinstance(data[tier_key], list) and len(data[tier_key]) > 0:
@@ -441,7 +433,7 @@ async def add_win(req: Request):
     save_json_file(MONTHLY_FILE, state["standings_monthly"])
 
     if not isinstance(state["standings_yearly"], dict):
-        state["standings_yearly"] = {"ALL": state["standings_yearly"] if isinstance(state["standings_yearly"], list) else list(DEFAULT_STANDINGS)}
+        state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
     yearly_all_list = state["standings_yearly"].setdefault("ALL", list(DEFAULT_STANDINGS))
     state["standings_yearly"]["ALL"], updated_p_yearly = update_wins_in_list(yearly_all_list, tag, amount)
     save_json_file(YEARLY_FILE, state["standings_yearly"])
@@ -559,7 +551,7 @@ async def undo_win(req: Request):
         save_json_file(MONTHLY_FILE, state["standings_monthly"])
     elif tier_target == "yearly":
         if not isinstance(state["standings_yearly"], dict):
-            state["standings_yearly"] = {"ALL": state["standings_yearly"] if isinstance(state["standings_yearly"], list) else list(DEFAULT_STANDINGS)}
+            state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
         state["standings_yearly"]["ALL"] = undo_in_list(state["standings_yearly"]["ALL"])
         save_json_file(YEARLY_FILE, state["standings_yearly"])
     else:
@@ -710,8 +702,10 @@ async def reset_standings(req: Request = None):
         state["standings_weekly"] = zero_out_list(state["standings_weekly"])
         state["standings_monthly"] = zero_out_list(state["standings_monthly"])
         if isinstance(state["standings_yearly"], dict):
-            for k in state["standings_yearly"]:
-                zero_out_list(state["standings_yearly"][k])
+            # Only zero out the 'ALL' cumulative yearly list, preserve historical archive monthly keys (e.g. yearly_2026_AUG)
+            for k in list(state["standings_yearly"].keys()):
+                if k == "ALL":
+                    zero_out_list(state["standings_yearly"][k])
         else:
             state["standings_yearly"] = {"ALL": zero_out_list(list(DEFAULT_STANDINGS))}
         state["standings_master"] = zero_out_list(state["standings_master"])
@@ -733,8 +727,26 @@ async def reset_standings(req: Request = None):
             zero_out_list(state["standings_weekly"])
             save_json_file(WEEKLY_FILE, state["standings_weekly"])
         elif scope == "monthly":
+            # Before resetting monthly, archive current monthly stats into the previous month's historical key if available
+            now = datetime.now()
+            prev_month_str = now.strftime("%Y-%m")
+            parts = prev_month_str.split("-")
+            if len(parts) == 2:
+                y_str, m_str = parts
+                # Calculate previous month for safety snapshot
+                m_int = int(m_str) - 1
+                if m_int < 1: 
+                    m_int = 12
+                    y_str = str(int(y_str) - 1)
+                m_code = {"1": "JAN", "2": "FEB", "3": "MAR", "4": "APR", "5": "MAY", "6": "JUN", "7": "JUL", "8": "AUG", "9": "SEP", "10": "OCT", "11": "NOV", "12": "DEC"}.get(str(m_int), "SEP")
+                archive_key = f"yearly_{y_str}_{m_code}"
+                if not isinstance(state["standings_yearly"], dict):
+                    state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
+                state["standings_yearly"][archive_key] = list(state["standings_monthly"])
+
             zero_out_list(state["standings_monthly"])
             save_json_file(MONTHLY_FILE, state["standings_monthly"])
+            save_json_file(YEARLY_FILE, state["standings_yearly"])
         elif scope == "yearly":
             if not isinstance(state["standings_yearly"], dict):
                 state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
