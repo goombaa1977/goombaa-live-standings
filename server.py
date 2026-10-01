@@ -108,12 +108,13 @@ if isinstance(raw_yearly, list):
 else:
     initial_yearly = raw_yearly
 
-initial_master = load_json_file(MASTER_FILE, list(DEFAULT_STANDINGS))
+# Force Master to share the exact same reference as Yearly ALL to prevent drift
+initial_master = initial_yearly.setdefault("ALL", load_json_file(MASTER_FILE, list(DEFAULT_STANDINGS)))
 initial_queue = load_json_file(QUEUE_FILE, [])
 
 # Automatic Periodical Resets Check Logic (Weekly, Monthly, Yearly with Archive Snapshots)
 def check_and_perform_automatic_resets():
-    global initial_weekly, initial_monthly, initial_yearly
+    global initial_weekly, initial_monthly, initial_yearly, initial_master
     now = datetime.now()
     current_year, current_week, _ = now.isocalendar()
     current_month = now.strftime("%Y-%m")
@@ -162,10 +163,13 @@ def check_and_perform_automatic_resets():
         if not isinstance(state["standings_yearly"], dict):
             state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
         state["standings_yearly"]["ALL"] = zero_out_wins_preserve_names(state["standings_yearly"].get("ALL", list(DEFAULT_STANDINGS)))
+        state["standings_master"] = state["standings_yearly"]["ALL"]
+        state["standings"] = state["standings_master"]
         save_json_file(YEARLY_FILE, state["standings_yearly"])
+        save_json_file(MASTER_FILE, state["standings_master"])
         metadata["last_year"] = current_year_str
         updated = True
-        print(f"[Goombaa Auto-Reset] New year detected ({current_year_str}). Yearly standings reset.")
+        print(f"[Goombaa Auto-Reset] New year detected ({current_year_str}). Yearly and Master standings reset.")
 
     if updated:
         save_json_file(META_FILE, metadata)
@@ -369,7 +373,12 @@ async def get_standings():
                     if not isinstance(state["standings_yearly"], dict):
                         state["standings_yearly"] = {}
                     state["standings_yearly"]["ALL"] = data["yearly"]
-            state["standings_master"] = data.get("master", state["standings_master"])
+            
+            if "master" in data:
+                state["standings_master"] = data["master"]
+            elif isinstance(state["standings_yearly"], dict) and "ALL" in state["standings_yearly"]:
+                state["standings_master"] = state["standings_yearly"]["ALL"]
+            
             state["standings"] = state["standings_master"]
             
             save_json_file(DAILY_FILE, state["standings_daily"])
@@ -440,7 +449,9 @@ async def add_win(req: Request):
     state["standings_yearly"]["ALL"], updated_p_yearly = update_wins_in_list(yearly_all_list, tag, amount)
     save_json_file(YEARLY_FILE, state["standings_yearly"])
 
-    state["standings_master"], updated_p_master = update_wins_in_list(state["standings_master"], tag, amount)
+    # Keep Master perfectly synchronized with Yearly ALL
+    state["standings_master"] = state["standings_yearly"]["ALL"]
+    updated_p_master = updated_p_yearly
     state["standings"] = state["standings_master"]
     save_json_file(MASTER_FILE, state["standings_master"])
 
@@ -555,10 +566,16 @@ async def undo_win(req: Request):
         if not isinstance(state["standings_yearly"], dict):
             state["standings_yearly"] = {"ALL": state["standings_yearly"] if isinstance(state["standings_yearly"], list) else list(DEFAULT_STANDINGS)}
         state["standings_yearly"]["ALL"] = undo_in_list(state["standings_yearly"]["ALL"])
+        state["standings_master"] = state["standings_yearly"]["ALL"]
+        state["standings"] = state["standings_master"]
         save_json_file(YEARLY_FILE, state["standings_yearly"])
+        save_json_file(MASTER_FILE, state["standings_master"])
     else:
         tier_target = "master"
         state["standings_master"] = undo_in_list(state["standings_master"])
+        if isinstance(state["standings_yearly"], dict) and "ALL" in state["standings_yearly"]:
+            state["standings_yearly"]["ALL"] = state["standings_master"]
+            save_json_file(YEARLY_FILE, state["standings_yearly"])
         state["standings"] = state["standings_master"]
         save_json_file(MASTER_FILE, state["standings_master"])
 
@@ -617,10 +634,16 @@ async def edit_player_tag(req: Request):
         if not isinstance(state["standings_yearly"], dict):
             state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
         state["standings_yearly"]["ALL"] = edit_in_list(state["standings_yearly"]["ALL"])
+        state["standings_master"] = state["standings_yearly"]["ALL"]
+        state["standings"] = state["standings_master"]
         save_json_file(YEARLY_FILE, state["standings_yearly"])
+        save_json_file(MASTER_FILE, state["standings_master"])
     else:
         tier_target = "master"
         state["standings_master"] = edit_in_list(state["standings_master"])
+        if isinstance(state["standings_yearly"], dict) and "ALL" in state["standings_yearly"]:
+            state["standings_yearly"]["ALL"] = state["standings_master"]
+            save_json_file(YEARLY_FILE, state["standings_yearly"])
         state["standings"] = state["standings_master"]
         save_json_file(MASTER_FILE, state["standings_master"])
 
@@ -662,10 +685,16 @@ async def delete_player_tag(req: Request):
         if not isinstance(state["standings_yearly"], dict):
             state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
         state["standings_yearly"]["ALL"] = [p for p in state["standings_yearly"]["ALL"] if p["tag"].lower() != tag.lower()]
+        state["standings_master"] = state["standings_yearly"]["ALL"]
+        state["standings"] = state["standings_master"]
         save_json_file(YEARLY_FILE, state["standings_yearly"])
+        save_json_file(MASTER_FILE, state["standings_master"])
     else:
         tier_target = "master"
         state["standings_master"] = [p for p in state["standings_master"] if p["tag"].lower() != tag.lower()]
+        if isinstance(state["standings_yearly"], dict) and "ALL" in state["standings_yearly"]:
+            state["standings_yearly"]["ALL"] = state["standings_master"]
+            save_json_file(YEARLY_FILE, state["standings_yearly"])
         state["standings"] = state["standings_master"]
         save_json_file(MASTER_FILE, state["standings_master"])
 
@@ -708,7 +737,7 @@ async def reset_standings(req: Request = None):
                 zero_out_list(state["standings_yearly"][k])
         else:
             state["standings_yearly"] = {"ALL": zero_out_list(list(DEFAULT_STANDINGS))}
-        state["standings_master"] = zero_out_list(state["standings_master"])
+        state["standings_master"] = state["standings_yearly"]["ALL"]
         state["standings"] = state["standings_master"]
         
         save_json_file(DAILY_FILE, state["standings_daily"])
@@ -733,10 +762,16 @@ async def reset_standings(req: Request = None):
             if not isinstance(state["standings_yearly"], dict):
                 state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
             zero_out_list(state["standings_yearly"].get("ALL", []))
+            state["standings_master"] = state["standings_yearly"]["ALL"]
+            state["standings"] = state["standings_master"]
             save_json_file(YEARLY_FILE, state["standings_yearly"])
+            save_json_file(MASTER_FILE, state["standings_master"])
         else:
             scope = "master"
             zero_out_list(state["standings_master"])
+            if isinstance(state["standings_yearly"], dict) and "ALL" in state["standings_yearly"]:
+                state["standings_yearly"]["ALL"] = state["standings_master"]
+                save_json_file(YEARLY_FILE, state["standings_yearly"])
             state["standings"] = state["standings_master"]
             save_json_file(MASTER_FILE, state["standings_master"])
 
