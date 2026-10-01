@@ -2,8 +2,8 @@
 Goombaa Control Center - Backend Web Server
 File: server.py
 Description: Full FastAPI backend with centralized backend KOTH slot rotation for both Player 1 and Player 2,
-independent multi-tier win cascading (including Yearly), synchronized non-blocking Google Sheets background sync,
-and automated time-based periodic resets for weekly, monthly, and yearly standings (daily remains manual).
+independent multi-tier win cascading (including Yearly archives), synchronized non-blocking Google Sheets background sync,
+and automated time-based periodic resets with monthly historical archiving.
 """
 
 import os
@@ -101,11 +101,17 @@ app.add_middleware(
 initial_daily = load_json_file(DAILY_FILE, list(DEFAULT_STANDINGS))
 initial_weekly = load_json_file(WEEKLY_FILE, list(DEFAULT_STANDINGS))
 initial_monthly = load_json_file(MONTHLY_FILE, list(DEFAULT_STANDINGS))
-initial_yearly = load_json_file(YEARLY_FILE, list(DEFAULT_STANDINGS))
+
+raw_yearly = load_json_file(YEARLY_FILE, {"ALL": list(DEFAULT_STANDINGS)})
+if isinstance(raw_yearly, list):
+    initial_yearly = {"ALL": raw_yearly}
+else:
+    initial_yearly = raw_yearly
+
 initial_master = load_json_file(MASTER_FILE, list(DEFAULT_STANDINGS))
 initial_queue = load_json_file(QUEUE_FILE, [])
 
-# Automatic Periodical Resets Check Logic (Weekly, Monthly, Yearly only)
+# Automatic Periodical Resets Check Logic (Weekly, Monthly, Yearly with Archive Snapshots)
 def check_and_perform_automatic_resets():
     global initial_weekly, initial_monthly, initial_yearly
     now = datetime.now()
@@ -129,8 +135,22 @@ def check_and_perform_automatic_resets():
         updated = True
         print(f"[Goombaa Auto-Reset] New week detected ({current_week}). Weekly standings reset.")
 
-    # 2. Monthly Reset Check
+    # 2. Monthly Reset Check & Archival
     if saved_month != current_month:
+        if saved_month:
+            if not isinstance(state["standings_yearly"], dict):
+                state["standings_yearly"] = {"ALL": state["standings_yearly"] if isinstance(state["standings_yearly"], list) else list(DEFAULT_STANDINGS)}
+            
+            parts = saved_month.split("-")
+            if len(parts) == 2:
+                y_str, m_str = parts
+                m_names = {"01": "JAN", "02": "FEB", "03": "MAR", "04": "APR", "05": "MAY", "06": "JUN", "07": "JUL", "08": "AUG", "09": "SEP", "10": "OCT", "11": "NOV", "12": "DEC"}
+                m_code = m_names.get(m_str, m_str)
+                archive_key = f"yearly_{y_str}_{m_code}"
+                state["standings_yearly"][archive_key] = list(state["standings_monthly"])
+                save_json_file(YEARLY_FILE, state["standings_yearly"])
+                print(f"[Goombaa Archive] Archived monthly standings for {saved_month} under {archive_key}.")
+
         state["standings_monthly"] = zero_out_wins_preserve_names(state["standings_monthly"])
         save_json_file(MONTHLY_FILE, state["standings_monthly"])
         metadata["last_month"] = current_month
@@ -139,7 +159,9 @@ def check_and_perform_automatic_resets():
 
     # 3. Yearly Reset Check
     if saved_year != current_year_str:
-        state["standings_yearly"] = zero_out_wins_preserve_names(state["standings_yearly"])
+        if not isinstance(state["standings_yearly"], dict):
+            state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
+        state["standings_yearly"]["ALL"] = zero_out_wins_preserve_names(state["standings_yearly"].get("ALL", list(DEFAULT_STANDINGS)))
         save_json_file(YEARLY_FILE, state["standings_yearly"])
         metadata["last_year"] = current_year_str
         updated = True
@@ -182,6 +204,21 @@ state: Dict[str, Any] = {
     "standings_master": initial_master
 }
 
+def get_standings_payload():
+    payload = {
+        "daily": state["standings_daily"],
+        "weekly": state["standings_weekly"],
+        "monthly": state["standings_monthly"],
+        "master": state["standings_master"]
+    }
+    yearly_val = state["standings_yearly"]
+    if isinstance(yearly_val, dict):
+        payload.update(yearly_val)
+        payload["yearly"] = yearly_val.get("ALL", list(DEFAULT_STANDINGS))
+    else:
+        payload["yearly"] = yearly_val
+    return payload
+
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
@@ -189,7 +226,9 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        await websocket.send_text(json.dumps({"type": "FULL_STATE", "data": state}))
+        full_payload = dict(state)
+        full_payload["standings"] = get_standings_payload()
+        await websocket.send_text(json.dumps({"type": "FULL_STATE", "data": full_payload}))
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
@@ -232,7 +271,9 @@ async def post_match(req: Request):
         state["match"]["p2"] = p2_val
         state["match"]["player2"] = p2_val
     await manager.broadcast("MATCH_UPDATE", state["match"])
-    await manager.broadcast("FULL_STATE", state)
+    full_payload = dict(state)
+    full_payload["standings"] = get_standings_payload()
+    await manager.broadcast("FULL_STATE", full_payload)
     return state["match"]
 
 @app.get("/api/queue")
@@ -246,7 +287,9 @@ async def set_queue(req: Request):
         state["queue"] = data
         save_json_file(QUEUE_FILE, state["queue"])
     await manager.broadcast("QUEUE_UPDATE", state["queue"])
-    await manager.broadcast("FULL_STATE", state)
+    full_payload = dict(state)
+    full_payload["standings"] = get_standings_payload()
+    await manager.broadcast("FULL_STATE", full_payload)
     return state["queue"]
 
 @app.post("/api/queue/clear")
@@ -254,7 +297,9 @@ async def clear_queue():
     state["queue"] = []
     save_json_file(QUEUE_FILE, [])
     await manager.broadcast("QUEUE_UPDATE", state["queue"])
-    await manager.broadcast("FULL_STATE", state)
+    full_payload = dict(state)
+    full_payload["standings"] = get_standings_payload()
+    await manager.broadcast("FULL_STATE", full_payload)
     return []
 
 @app.get("/api/queue/next_match")
@@ -291,7 +336,9 @@ async def next_match(req: Request = None):
 
     await manager.broadcast("MATCH_UPDATE", state["match"])
     await manager.broadcast("QUEUE_UPDATE", state["queue"])
-    await manager.broadcast("FULL_STATE", state)
+    full_payload = dict(state)
+    full_payload["standings"] = get_standings_payload()
+    await manager.broadcast("FULL_STATE", full_payload)
     return {"status": "success", "match": state["match"], "queue": state["queue"]}
 
 @app.get("/api/standings")
@@ -315,7 +362,13 @@ async def get_standings():
             state["standings_daily"] = data.get("daily", state["standings_daily"])
             state["standings_weekly"] = data.get("weekly", state["standings_weekly"])
             state["standings_monthly"] = data.get("monthly", state["standings_monthly"])
-            state["standings_yearly"] = data.get("yearly", state["standings_yearly"])
+            if "yearly" in data:
+                if isinstance(data["yearly"], dict):
+                    state["standings_yearly"] = data["yearly"]
+                else:
+                    if not isinstance(state["standings_yearly"], dict):
+                        state["standings_yearly"] = {}
+                    state["standings_yearly"]["ALL"] = data["yearly"]
             state["standings_master"] = data.get("master", state["standings_master"])
             state["standings"] = state["standings_master"]
             
@@ -327,13 +380,7 @@ async def get_standings():
     except Exception as e:
         print(f"Notice: Google Sheets fetch skipped/timed out, serving local cache: {e}")
 
-    return {
-        "daily": state["standings_daily"],
-        "weekly": state["standings_weekly"],
-        "monthly": state["standings_monthly"],
-        "yearly": state["standings_yearly"],
-        "master": state["standings_master"]
-    }
+    return get_standings_payload()
 
 def update_wins_in_list(list_data: List[Dict[str, Any]], tag: str, amount: int) -> tuple:
     found_player = None
@@ -378,7 +425,6 @@ async def add_win(req: Request):
     if not tag or tag in ["Player 1", "Player 2"]:
         return {"status": "ignored"}
 
-    # 1. Independently increment and cascade the win across ALL five local tiers
     state["standings_daily"], updated_p_daily = update_wins_in_list(state["standings_daily"], tag, amount)
     save_json_file(DAILY_FILE, state["standings_daily"])
 
@@ -388,14 +434,16 @@ async def add_win(req: Request):
     state["standings_monthly"], updated_p_monthly = update_wins_in_list(state["standings_monthly"], tag, amount)
     save_json_file(MONTHLY_FILE, state["standings_monthly"])
 
-    state["standings_yearly"], updated_p_yearly = update_wins_in_list(state["standings_yearly"], tag, amount)
+    if not isinstance(state["standings_yearly"], dict):
+        state["standings_yearly"] = {"ALL": state["standings_yearly"] if isinstance(state["standings_yearly"], list) else list(DEFAULT_STANDINGS)}
+    yearly_all_list = state["standings_yearly"].setdefault("ALL", list(DEFAULT_STANDINGS))
+    state["standings_yearly"]["ALL"], updated_p_yearly = update_wins_in_list(yearly_all_list, tag, amount)
     save_json_file(YEARLY_FILE, state["standings_yearly"])
 
     state["standings_master"], updated_p_master = update_wins_in_list(state["standings_master"], tag, amount)
     state["standings"] = state["standings_master"]
     save_json_file(MASTER_FILE, state["standings_master"])
 
-    # 2. Push each tier's independent accumulated total to Google Sheets sequentially in the background
     async def background_sync_sheets():
         tiers_data = [
             ("daily", updated_p_daily),
@@ -416,7 +464,6 @@ async def add_win(req: Request):
 
     asyncio.create_task(background_sync_sheets())
 
-    # --- PROTECTED KOTH ROTATION LOGIC (FIXED) ---
     if auto_add:
         p1_current = str(state["match"].get("p1") or state["match"].get("player1") or "").strip()
         p2_current = str(state["match"].get("p2") or state["match"].get("player2") or "").strip()
@@ -456,19 +503,14 @@ async def add_win(req: Request):
                 state["match"]["player1"] = p2_current
                 state["match"]["p2"] = p1_current
                 state["match"]["player2"] = p1_current
-    # --- END OF PROTECTED KOTH ROTATION LOGIC ---
 
-    payload_full = {
-        "daily": state["standings_daily"],
-        "weekly": state["standings_weekly"],
-        "monthly": state["standings_monthly"],
-        "yearly": state["standings_yearly"],
-        "master": state["standings_master"]
-    }
+    payload_full = get_standings_payload()
     await manager.broadcast("STANDINGS_UPDATE", payload_full)
     await manager.broadcast("MATCH_UPDATE", state["match"])
     await manager.broadcast("QUEUE_UPDATE", state["queue"])
-    await manager.broadcast("FULL_STATE", state)
+    full_state_payload = dict(state)
+    full_state_payload["standings"] = payload_full
+    await manager.broadcast("FULL_STATE", full_state_payload)
     return {"status": "success", "standings": payload_full, "match": state["match"], "queue": state["queue"]}
 
 @app.post("/api/win/undo")
@@ -510,7 +552,9 @@ async def undo_win(req: Request):
         state["standings_monthly"] = undo_in_list(state["standings_monthly"])
         save_json_file(MONTHLY_FILE, state["standings_monthly"])
     elif tier_target == "yearly":
-        state["standings_yearly"] = undo_in_list(state["standings_yearly"])
+        if not isinstance(state["standings_yearly"], dict):
+            state["standings_yearly"] = {"ALL": state["standings_yearly"] if isinstance(state["standings_yearly"], list) else list(DEFAULT_STANDINGS)}
+        state["standings_yearly"]["ALL"] = undo_in_list(state["standings_yearly"]["ALL"])
         save_json_file(YEARLY_FILE, state["standings_yearly"])
     else:
         tier_target = "master"
@@ -527,15 +571,11 @@ async def undo_win(req: Request):
             "wins": int(updated_player_obj.get("wins", 0))
         })
 
-    payload_full = {
-        "daily": state["standings_daily"],
-        "weekly": state["standings_weekly"],
-        "monthly": state["standings_monthly"],
-        "yearly": state["standings_yearly"],
-        "master": state["standings_master"]
-    }
+    payload_full = get_standings_payload()
     await manager.broadcast("STANDINGS_UPDATE", payload_full)
-    await manager.broadcast("FULL_STATE", state)
+    full_state_payload = dict(state)
+    full_state_payload["standings"] = payload_full
+    await manager.broadcast("FULL_STATE", full_state_payload)
     return {"status": "success", "standings": payload_full}
 
 @app.post("/api/standings/edit")
@@ -574,7 +614,9 @@ async def edit_player_tag(req: Request):
         state["standings_monthly"] = edit_in_list(state["standings_monthly"])
         save_json_file(MONTHLY_FILE, state["standings_monthly"])
     elif tier_target == "yearly":
-        state["standings_yearly"] = edit_in_list(state["standings_yearly"])
+        if not isinstance(state["standings_yearly"], dict):
+            state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
+        state["standings_yearly"]["ALL"] = edit_in_list(state["standings_yearly"]["ALL"])
         save_json_file(YEARLY_FILE, state["standings_yearly"])
     else:
         tier_target = "master"
@@ -591,15 +633,11 @@ async def edit_player_tag(req: Request):
             "wins": int(edited_player_obj.get("wins", 0))
         })
 
-    payload_full = {
-        "daily": state["standings_daily"],
-        "weekly": state["standings_weekly"],
-        "monthly": state["standings_monthly"],
-        "yearly": state["standings_yearly"],
-        "master": state["standings_master"]
-    }
+    payload_full = get_standings_payload()
     await manager.broadcast("STANDINGS_UPDATE", payload_full)
-    await manager.broadcast("FULL_STATE", state)
+    full_state_payload = dict(state)
+    full_state_payload["standings"] = payload_full
+    await manager.broadcast("FULL_STATE", full_state_payload)
     return {"status": "success", "standings": payload_full}
 
 @app.post("/api/standings/delete")
@@ -621,7 +659,9 @@ async def delete_player_tag(req: Request):
         state["standings_monthly"] = [p for p in state["standings_monthly"] if p["tag"].lower() != tag.lower()]
         save_json_file(MONTHLY_FILE, state["standings_monthly"])
     elif tier_target == "yearly":
-        state["standings_yearly"] = [p for p in state["standings_yearly"] if p["tag"].lower() != tag.lower()]
+        if not isinstance(state["standings_yearly"], dict):
+            state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
+        state["standings_yearly"]["ALL"] = [p for p in state["standings_yearly"]["ALL"] if p["tag"].lower() != tag.lower()]
         save_json_file(YEARLY_FILE, state["standings_yearly"])
     else:
         tier_target = "master"
@@ -635,15 +675,11 @@ async def delete_player_tag(req: Request):
         "tag": tag
     })
 
-    payload_full = {
-        "daily": state["standings_daily"],
-        "weekly": state["standings_weekly"],
-        "monthly": state["standings_monthly"],
-        "yearly": state["standings_yearly"],
-        "master": state["standings_master"]
-    }
+    payload_full = get_standings_payload()
     await manager.broadcast("STANDINGS_UPDATE", payload_full)
-    await manager.broadcast("FULL_STATE", state)
+    full_state_payload = dict(state)
+    full_state_payload["standings"] = payload_full
+    await manager.broadcast("FULL_STATE", full_state_payload)
     return {"status": "success", "standings": payload_full}
 
 @app.post("/api/standings/reset")
@@ -667,7 +703,11 @@ async def reset_standings(req: Request = None):
         state["standings_daily"] = zero_out_list(state["standings_daily"])
         state["standings_weekly"] = zero_out_list(state["standings_weekly"])
         state["standings_monthly"] = zero_out_list(state["standings_monthly"])
-        state["standings_yearly"] = zero_out_list(state["standings_yearly"])
+        if isinstance(state["standings_yearly"], dict):
+            for k in state["standings_yearly"]:
+                zero_out_list(state["standings_yearly"][k])
+        else:
+            state["standings_yearly"] = {"ALL": zero_out_list(list(DEFAULT_STANDINGS))}
         state["standings_master"] = zero_out_list(state["standings_master"])
         state["standings"] = state["standings_master"]
         
@@ -690,7 +730,9 @@ async def reset_standings(req: Request = None):
             zero_out_list(state["standings_monthly"])
             save_json_file(MONTHLY_FILE, state["standings_monthly"])
         elif scope == "yearly":
-            zero_out_list(state["standings_yearly"])
+            if not isinstance(state["standings_yearly"], dict):
+                state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
+            zero_out_list(state["standings_yearly"].get("ALL", []))
             save_json_file(YEARLY_FILE, state["standings_yearly"])
         else:
             scope = "master"
@@ -700,15 +742,11 @@ async def reset_standings(req: Request = None):
 
         post_to_google_sheets({"action": "reset", "tier": scope})
 
-    payload_full = {
-        "daily": state["standings_daily"],
-        "weekly": state["standings_weekly"],
-        "monthly": state["standings_monthly"],
-        "yearly": state["standings_yearly"],
-        "master": state["standings_master"]
-    }
+    payload_full = get_standings_payload()
     await manager.broadcast("STANDINGS_UPDATE", payload_full)
-    await manager.broadcast("FULL_STATE", state)
+    full_state_payload = dict(state)
+    full_state_payload["standings"] = payload_full
+    await manager.broadcast("FULL_STATE", full_state_payload)
     return {"status": "success", "scope": scope, "standings": payload_full}
 
 @app.get("/api/banner")
@@ -720,7 +758,9 @@ async def post_banner(req: Request):
     data = await req.json()
     state["banner"].update(data)
     await manager.broadcast("BANNER_UPDATE", state["banner"])
-    await manager.broadcast("FULL_STATE", state)
+    full_state_payload = dict(state)
+    full_state_payload["standings"] = get_standings_payload()
+    await manager.broadcast("FULL_STATE", full_state_payload)
     return state["banner"]
 
 @app.get("/api/cocommentator")
@@ -732,7 +772,9 @@ async def post_cocommentator(req: Request):
     data = await req.json()
     state["cocommentator"].update(data)
     await manager.broadcast("COMMENTATOR_UPDATE", state["cocommentator"])
-    await manager.broadcast("FULL_STATE", state)
+    full_state_payload = dict(state)
+    full_state_payload["standings"] = get_standings_payload()
+    await manager.broadcast("FULL_STATE", full_state_payload)
     return state["cocommentator"]
 
 @app.get("/api/charity")
@@ -754,7 +796,9 @@ async def post_charity(req: Request):
             pass
 
     await manager.broadcast("CHARITY_UPDATE", state["charity"])
-    await manager.broadcast("FULL_STATE", state)
+    full_state_payload = dict(state)
+    full_state_payload["standings"] = get_standings_payload()
+    await manager.broadcast("FULL_STATE", full_state_payload)
     return state["charity"]
 
 @app.get("/standings.html")
