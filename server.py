@@ -48,6 +48,113 @@ DEFAULT_STANDINGS = [
     {"tag": "TMO", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"}
 ]
 
+# Explicit September 2026 Archive Snapshot Dataset
+SEPTEMBER_2026_SNAPSHOT = [
+    {"tag": "Goombaa", "platform": "Twitch", "wins": "67", "points": "0", "rank": "Silver"},
+    {"tag": "PhantomOrphan", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"},
+    {"tag": "Alec", "platform": "Twitch", "wins": "36", "points": "0", "rank": "Bronze"},
+    {"tag": "Royal", "platform": "Twitch", "wins": "64", "points": "0", "rank": "Silver"},
+    {"tag": "Someguy", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "Brandy", "platform": "TikTok", "wins": "14", "points": "0", "rank": "Bronze"},
+    {"tag": "Jonathan", "platform": "Twitch", "wins": "8", "points": "0", "rank": "Bronze"},
+    {"tag": "Liam", "platform": "TikTok", "wins": "4", "points": "0", "rank": "Bronze"},
+    {"tag": "Not A Saint", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"},
+    {"tag": "Nuber", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"},
+    {"tag": "Ocu", "platform": "Twitch", "wins": "0", "points": "0", "rank": "-"},
+    {"tag": "TMO", "platform": "Twitch", "wins": "48", "points": "0", "rank": "Bronze"},
+    {"tag": "Phantom", "platform": "Twitch", "wins": "8", "points": "0", "rank": "Bronze"},
+    {"tag": "Redstoneer", "platform": "Twitch", "wins": "18", "points": "0", "rank": "Bronze"},
+    {"tag": "Pepper", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "TLG", "platform": "Twitch", "wins": "3", "points": "0", "rank": "Bronze"},
+    {"tag": "Legis", "platform": "Twitch", "wins": "3", "points": "0", "rank": "Bronze"},
+    {"tag": "Thormax", "platform": "Twitch", "wins": "4", "points": "0", "rank": "Bronze"},
+    {"tag": "Ben!!!", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "Laura and JF", "platform": "Twitch", "wins": "5", "points": "0", "rank": "Bronze"},
+    {"tag": "Bmx", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "Jufu", "platform": "Twitch", "wins": "4", "points": "0", "rank": "Bronze"},
+    {"tag": "Drl#4200", "platform": "Twitch", "wins": "4", "points": "0", "rank": "Bronze"},
+    {"tag": "Brownser", "platform": "Twitch", "wins": "5", "points": "0", "rank": "Bronze"},
+    {"tag": "Cobra", "platform": "Twitch", "wins": "2", "points": "0", "rank": "Bronze"},
+    {"tag": "Quietstorm", "platform": "Twitch", "wins": "8", "points": "0", "rank": "Bronze"},
+    {"tag": "MenloPark", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "Syg", "platform": "Twitch", "wins": "5", "points": "0", "rank": "Bronze"},
+    {"tag": "Shiri", "platform": "Twitch", "wins": "2", "points": "0", "rank": "Bronze"},
+    {"tag": "Luffy", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "StrongestZai", "platform": "Twitch", "wins": "8", "points": "0", "rank": "Bronze"},
+    {"tag": "Stefan", "platform": "Twitch", "wins": "2", "points": "0", "rank": "Bronze"},
+    {"tag": "Slowpoke", "platform": "Twitch", "wins": "6", "points": "0", "rank": "Bronze"},
+    {"tag": "Star", "platform": "Twitch", "wins": "9", "points": "0", "rank": "Bronze"},
+    {"tag": "Restoneer", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "Cm$", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "F133k", "platform": "Twitch", "wins": "5", "points": "0", "rank": "Bronze"},
+    {"tag": "Mutt", "platform": "Twitch", "wins": "5", "points": "0", "rank": "Bronze"},
+    {"tag": "Mustard", "platform": "Twitch", "wins": "8", "points": "0", "rank": "Bronze"},
+    {"tag": "Spponic", "platform": "Twitch", "wins": "2", "points": "0", "rank": "Bronze"},
+    {"tag": "LeomiLob", "platform": "Twitch", "wins": "8", "points": "0", "rank": "Bronze"},
+    {"tag": "ToxicMin", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "GordanRams", "platform": "Twitch", "wins": "6", "points": "0", "rank": "Bronze"},
+    {"tag": "Level20", "platform": "Twitch", "wins": "8", "points": "0", "rank": "Bronze"},
+    {"tag": "GabeOwners", "platform": "Twitch", "wins": "13", "points": "0", "rank": "Bronze"},
+    {"tag": "TebbleTots", "platform": "Twitch", "wins": "7", "points": "0", "rank": "Bronze"},
+    {"tag": "Gigapunch", "platform": "Twitch", "wins": "4", "points": "0", "rank": "Bronze"},
+    {"tag": "Jaiden", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "Rriders#9", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "Zio", "platform": "Twitch", "wins": "7", "points": "0", "rank": "Bronze"},
+    {"tag": "KingOreo", "platform": "Twitch", "wins": "2", "points": "0", "rank": "Bronze"},
+    {"tag": "Milesisbae", "platform": "Twitch", "wins": "8", "points": "0", "rank": "Bronze"},
+    {"tag": "Salty", "platform": "Twitch", "wins": "5", "points": "0", "rank": "Bronze"},
+    {"tag": "ElDiablo", "platform": "Twitch", "wins": "3", "points": "0", "rank": "Bronze"},
+    {"tag": "LittleFoot", "platform": "Twitch", "wins": "2", "points": "0", "rank": "Bronze"},
+    {"tag": "Drazox", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "Flames", "platform": "Twitch", "wins": "8", "points": "0", "rank": "Bronze"},
+    {"tag": "Colyn", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "Laura & JP", "platform": "Twitch", "wins": "7", "points": "0", "rank": "Bronze"},
+    {"tag": "Crowd Fav", "platform": "Twitch", "wins": "5", "points": "0", "rank": "Bronze"},
+    {"tag": "FusionVox", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "KBF", "platform": "Twitch", "wins": "15", "points": "0", "rank": "Bronze"},
+    {"tag": "Pk Balling", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "SlackLink", "platform": "Twitch", "wins": "4", "points": "0", "rank": "Bronze"},
+    {"tag": "Deafloz", "platform": "Twitch", "wins": "2", "points": "0", "rank": "Bronze"},
+    {"tag": "New87", "platform": "Twitch", "wins": "4", "points": "0", "rank": "Bronze"},
+    {"tag": "PKFire", "platform": "Twitch", "wins": "3", "points": "0", "rank": "Bronze"},
+    {"tag": "Mrme", "platform": "Twitch", "wins": "2", "points": "0", "rank": "Bronze"},
+    {"tag": "Skull king", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "Luonos", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "Coolman13", "platform": "Twitch", "wins": "4", "points": "0", "rank": "Bronze"},
+    {"tag": "Billy", "platform": "Twitch", "wins": "6", "points": "0", "rank": "Bronze"},
+    {"tag": "Sir Oosh", "platform": "Twitch", "wins": "3", "points": "0", "rank": "Bronze"},
+    {"tag": "Anthony", "platform": "Twitch", "wins": "10", "points": "0", "rank": "Bronze"},
+    {"tag": "Ace", "platform": "Twitch", "wins": "5", "points": "0", "rank": "Bronze"},
+    {"tag": "Aidtt", "platform": "Twitch", "wins": "6", "points": "0", "rank": "Bronze"},
+    {"tag": "Don", "platform": "Twitch", "wins": "5", "points": "0", "rank": "Bronze"},
+    {"tag": "Daniel", "platform": "Twitch", "wins": "5", "points": "0", "rank": "Bronze"},
+    {"tag": "Curry", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "UndeadVlad", "platform": "Twitch", "wins": "4", "points": "0", "rank": "Bronze"},
+    {"tag": "Shidain", "platform": "Twitch", "wins": "2", "points": "0", "rank": "Bronze"},
+    {"tag": "Wethotdog", "platform": "Twitch", "wins": "2", "points": "0", "rank": "Bronze"},
+    {"tag": "Samba", "platform": "Twitch", "wins": "16", "points": "0", "rank": "Bronze"},
+    {"tag": "BlueDragon", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "Swish", "platform": "Twitch", "wins": "3", "points": "0", "rank": "Bronze"},
+    {"tag": "NinjaToast", "platform": "Twitch", "wins": "4", "points": "0", "rank": "Bronze"},
+    {"tag": "Red Fang", "platform": "Twitch", "wins": "4", "points": "0", "rank": "Bronze"},
+    {"tag": "Zard", "platform": "Twitch", "wins": "6", "points": "0", "rank": "Bronze"},
+    {"tag": "Joemama", "platform": "Twitch", "wins": "2", "points": "0", "rank": "Bronze"},
+    {"tag": "Flame", "platform": "Twitch", "wins": "8", "points": "0", "rank": "Bronze"},
+    {"tag": "Steph2", "platform": "Twitch", "wins": "4", "points": "0", "rank": "Bronze"},
+    {"tag": "A Dubb", "platform": "Twitch", "wins": "2", "points": "0", "rank": "Bronze"},
+    {"tag": "WeButt", "platform": "Twitch", "wins": "2", "points": "0", "rank": "Bronze"},
+    {"tag": "Ceo coffee", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "Determined", "platform": "Twitch", "wins": "5", "points": "0", "rank": "Bronze"},
+    {"tag": "CoolJon", "platform": "Twitch", "wins": "2", "points": "0", "rank": "Bronze"},
+    {"tag": "Enit", "platform": "Twitch", "wins": "2", "points": "0", "rank": "Bronze"},
+    {"tag": "Sueloswerv", "platform": "Twitch", "wins": "7", "points": "0", "rank": "Bronze"},
+    {"tag": "RedFang", "platform": "Twitch", "wins": "1", "points": "0", "rank": "Bronze"},
+    {"tag": "Mitch", "platform": "Twitch", "wins": "10", "points": "0", "rank": "Bronze"},
+    {"tag": "Yucatron", "platform": "Twitch", "wins": "11", "points": "0", "rank": "Bronze"},
+    {"tag": "Akenna", "platform": "Twitch", "wins": "6", "points": "0", "rank": "Bronze"},
+    {"tag": "Spidey", "platform": "Twitch", "wins": "4", "points": "0", "rank": "Bronze"}
+]
+
 def load_json_file(filepath: str, fallback_data: Any) -> Any:
     if os.path.exists(filepath):
         try:
@@ -108,13 +215,12 @@ if isinstance(raw_yearly, list):
 else:
     initial_yearly = raw_yearly
 
+# Force embed September archive permanently so it is always selectable under Yearly
+initial_yearly["yearly_2026_SEP"] = list(SEPTEMBER_2026_SNAPSHOT)
+save_json_file(YEARLY_FILE, initial_yearly)
+
 initial_master = load_json_file(MASTER_FILE, list(DEFAULT_STANDINGS))
 initial_queue = load_json_file(QUEUE_FILE, [])
-
-# Ensure September archive and Master have robust fallback baseline data if empty
-if "yearly_2026_SEP" not in initial_yearly or not initial_yearly["yearly_2026_SEP"]:
-    initial_yearly["yearly_2026_SEP"] = list(initial_master)
-    save_json_file(YEARLY_FILE, initial_yearly)
 
 def check_and_perform_automatic_resets():
     global initial_weekly, initial_monthly, initial_yearly, initial_master
@@ -338,7 +444,7 @@ async def next_match(req: Request = None):
 @app.get("/api/standings")
 async def get_standings():
     check_and_perform_automatic_resets()
-    # Protected fetch: Only update local state from Google Sheets if valid non-empty data is returned
+    # Protected Google Sheets Sync: Allow live fetching while guaranteeing September archive is always present
     try:
         def fetch_google():
             req = urllib.request.Request(GOOGLE_SHEET_WEB_APP_URL, headers={'User-Agent': 'Mozilla/5.0'})
@@ -348,43 +454,45 @@ async def get_standings():
         data = await asyncio.to_thread(fetch_google)
         
         if data and isinstance(data, dict):
-            master_incoming = data.get("master") or data.get("yearly")
-            if master_incoming and isinstance(master_incoming, list) and len(master_data := master_incoming) > 3:
-                for tier_key in ["daily", "weekly", "monthly", "yearly", "master"]:
-                    if tier_key in data and isinstance(data[tier_key], list) and len(data[tier_key]) > 0:
-                        for p in data[tier_key]:
-                            p["wins"] = str(p.get("wins", "0"))
-                            p["points"] = "0"
+            for tier_key in ["daily", "weekly", "monthly", "yearly", "master"]:
+                if tier_key in data and isinstance(data[tier_key], list) and len(data[tier_key]) > 0:
+                    for p in data[tier_key]:
+                        p["wins"] = str(p.get("wins", "0"))
+                        p["points"] = "0"
+            
+            if len(data.get("daily", [])) > 0:
+                state["standings_daily"] = data.get("daily")
+                save_json_file(DAILY_FILE, state["standings_daily"])
+            if len(data.get("weekly", [])) > 0:
+                state["standings_weekly"] = data.get("weekly")
+                save_json_file(WEEKLY_FILE, state["standings_weekly"])
+            if len(data.get("monthly", [])) > 0:
+                state["standings_monthly"] = data.get("monthly")
+                save_json_file(MONTHLY_FILE, state["standings_monthly"])
+            
+            if "yearly" in data:
+                if isinstance(data["yearly"], dict) and len(data["yearly"]) > 0:
+                    state["standings_yearly"] = data["yearly"]
+                elif isinstance(data["yearly"], list) and len(data["yearly"]) > 0:
+                    if not isinstance(state["standings_yearly"], dict):
+                        state["standings_yearly"] = {}
+                    state["standings_yearly"]["ALL"] = data["yearly"]
                 
-                if len(data.get("daily", [])) > 0:
-                    state["standings_daily"] = data.get("daily")
-                    save_json_file(DAILY_FILE, state["standings_daily"])
-                if len(data.get("weekly", [])) > 0:
-                    state["standings_weekly"] = data.get("weekly")
-                    save_json_file(WEEKLY_FILE, state["standings_weekly"])
-                if len(data.get("monthly", [])) > 0:
-                    state["standings_monthly"] = data.get("monthly")
-                    save_json_file(MONTHLY_FILE, state["standings_monthly"])
-                
-                if "yearly" in data:
-                    if isinstance(data["yearly"], dict) and len(data["yearly"]) > 0:
-                        state["standings_yearly"] = data["yearly"]
-                    elif isinstance(data["yearly"], list) and len(data["yearly"]) > 0:
-                        if not isinstance(state["standings_yearly"], dict):
-                            state["standings_yearly"] = {}
-                        state["standings_yearly"]["ALL"] = data["yearly"]
-                    # Ensure September archive remains intact
-                    if "yearly_2026_SEP" not in state["standings_yearly"] or not state["standings_yearly"]["yearly_2026_SEP"]:
-                        state["standings_yearly"]["yearly_2026_SEP"] = list(master_data)
-                    save_json_file(YEARLY_FILE, state["standings_yearly"])
-                
-                if "master" in data and isinstance(data["master"], list) and len(data["master"]) > 3:
-                    state["standings_master"] = data["master"]
-                    save_json_file(MASTER_FILE, state["standings_master"])
-                
-                state["standings"] = state["standings_master"]
+                # Force ensure September 2026 archive is always available
+                state["standings_yearly"]["yearly_2026_SEP"] = list(SEPTEMBER_2026_SNAPSHOT)
+                save_json_file(YEARLY_FILE, state["standings_yearly"])
+            
+            if "master" in data and isinstance(data["master"], list) and len(data["master"]) > 0:
+                state["standings_master"] = data["master"]
+                save_json_file(MASTER_FILE, state["standings_master"])
+            
+            state["standings"] = state["standings_master"]
     except Exception as e:
         print(f"Notice: Google Sheets fetch skipped/timed out, serving local cache: {e}")
+
+    # Ensure September archive remains locked in payload output
+    if isinstance(state["standings_yearly"], dict):
+        state["standings_yearly"]["yearly_2026_SEP"] = list(SEPTEMBER_2026_SNAPSHOT)
 
     return get_standings_payload()
 
@@ -444,6 +552,7 @@ async def add_win(req: Request):
         state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
     yearly_all_list = state["standings_yearly"].setdefault("ALL", list(DEFAULT_STANDINGS))
     state["standings_yearly"]["ALL"], updated_p_yearly = update_wins_in_list(yearly_all_list, tag, amount)
+    state["standings_yearly"]["yearly_2026_SEP"] = list(SEPTEMBER_2026_SNAPSHOT)
     save_json_file(YEARLY_FILE, state["standings_yearly"])
 
     state["standings_master"], updated_p_master = update_wins_in_list(state["standings_master"], tag, amount)
@@ -561,6 +670,7 @@ async def undo_win(req: Request):
         if not isinstance(state["standings_yearly"], dict):
             state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
         state["standings_yearly"]["ALL"] = undo_in_list(state["standings_yearly"]["ALL"])
+        state["standings_yearly"]["yearly_2026_SEP"] = list(SEPTEMBER_2026_SNAPSHOT)
         save_json_file(YEARLY_FILE, state["standings_yearly"])
     else:
         tier_target = "master"
@@ -623,6 +733,7 @@ async def edit_player_tag(req: Request):
         if not isinstance(state["standings_yearly"], dict):
             state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
         state["standings_yearly"]["ALL"] = edit_in_list(state["standings_yearly"]["ALL"])
+        state["standings_yearly"]["yearly_2026_SEP"] = list(SEPTEMBER_2026_SNAPSHOT)
         save_json_file(YEARLY_FILE, state["standings_yearly"])
     else:
         tier_target = "master"
@@ -668,6 +779,7 @@ async def delete_player_tag(req: Request):
         if not isinstance(state["standings_yearly"], dict):
             state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
         state["standings_yearly"]["ALL"] = [p for p in state["standings_yearly"]["ALL"] if p["tag"].lower() != tag.lower()]
+        state["standings_yearly"]["yearly_2026_SEP"] = list(SEPTEMBER_2026_SNAPSHOT)
         save_json_file(YEARLY_FILE, state["standings_yearly"])
     else:
         tier_target = "master"
@@ -715,6 +827,7 @@ async def reset_standings(req: Request = None):
                     zero_out_list(state["standings_yearly"][k])
         else:
             state["standings_yearly"] = {"ALL": zero_out_list(list(DEFAULT_STANDINGS))}
+        state["standings_yearly"]["yearly_2026_SEP"] = list(SEPTEMBER_2026_SNAPSHOT)
         state["standings_master"] = zero_out_list(state["standings_master"])
         state["standings"] = state["standings_master"]
         
@@ -740,6 +853,7 @@ async def reset_standings(req: Request = None):
             if not isinstance(state["standings_yearly"], dict):
                 state["standings_yearly"] = {"ALL": list(DEFAULT_STANDINGS)}
             zero_out_list(state["standings_yearly"].get("ALL", []))
+            state["standings_yearly"]["yearly_2026_SEP"] = list(SEPTEMBER_2026_SNAPSHOT)
             save_json_file(YEARLY_FILE, state["standings_yearly"])
         else:
             scope = "master"
